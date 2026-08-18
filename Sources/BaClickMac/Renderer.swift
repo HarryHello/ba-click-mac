@@ -315,7 +315,11 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder.setRenderPipelineState(bloomAddPipeline)
             encoder.setFragmentTexture(trailBloom, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
-            strength = settings.trailBloomStrength
+            // Normalize by trail length so a long/fast trail is not brighter
+            // than a short/slow one (self-luminous trail brightness).
+            let trailLength = computeTrailLength()
+            let lengthFactor = min(1.0, 300.0 / max(trailLength, 1.0))
+            strength = settings.trailBloomStrength * lengthFactor
             falloff = settings.bloomFalloff
             encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
             encoder.setFragmentBytes(&falloff, length: MemoryLayout<Float>.size, index: 1)
@@ -408,6 +412,14 @@ final class Renderer: NSObject, MTKViewDelegate {
                     to: &vertices
                 )
             }
+        }
+    }
+
+    private func computeTrailLength() -> Float {
+        let points = particleSystem.trail
+        guard points.count >= 2 else { return 0 }
+        return zip(points, points.dropFirst()).reduce(Float(0)) { acc, pair in
+            acc + simd_distance(pair.0.position, pair.1.position)
         }
     }
 
