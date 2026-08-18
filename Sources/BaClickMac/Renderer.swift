@@ -643,9 +643,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         attachment.rgbBlendOperation = .add
         attachment.alphaBlendOperation = .add
         attachment.sourceRGBBlendFactor = .one
-        attachment.sourceAlphaBlendFactor = .zero
+        attachment.sourceAlphaBlendFactor = .one
         attachment.destinationRGBBlendFactor = .one
-        attachment.destinationAlphaBlendFactor = .one
+        attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
 
         return try device.makeRenderPipelineState(descriptor: descriptor)
     }

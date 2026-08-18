@@ -172,8 +172,8 @@ enum ShaderSource {
         return float4(color * alpha, alpha);
     }
 
-    // Additive bloom overlay: adds blurred scene light on top of the already
-    // drawn core effect without touching the window alpha.
+    // Bloom overlay: adds blurred scene light AND alpha so the halo extends
+    // beyond the core coverage instead of staying invisible outside it.
     fragment float4 bloom_add_fragment(
         FullscreenOut in [[stage_in]],
         texture2d<float> bloom [[texture(0)]],
@@ -181,7 +181,9 @@ enum ShaderSource {
         constant float &strength [[buffer(0)]]
     ) {
         float4 b = bloom.sample(samp, in.uv);
-        return float4(b.rgb * max(strength, 0.0), 0.0);
+        float3 c = clamp(b.rgb * max(strength, 0.0), 0.0, 1.0);
+        float a = min(1.0, max(max(c.r, c.g), c.b));
+        return float4(c * a, a);
     }
     """
 }
