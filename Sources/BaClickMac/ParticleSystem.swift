@@ -41,6 +41,8 @@ final class ParticleSystem {
 
     private(set) var pendingClicks: [SIMD2<Float>] = []
     private var scale: Float = 1
+    var ringScale: Float = 1
+    var shardScale: Float = 1
     private var lastTime: Double = 0
     private var lastTrailPoint: SIMD2<Float> = .zero
     private var lastPointerPosition: SIMD2<Float>?
@@ -108,7 +110,7 @@ final class ParticleSystem {
             let angularBlend = Float.random(in: 0...1)
             rings.append(
                 RingParticle(
-                    radius: Float.random(in: BAEffect.rings.radiusMin...BAEffect.rings.radiusMax) * scale,
+                    radius: Float.random(in: BAEffect.rings.radiusMin...BAEffect.rings.radiusMax) * ringScale * scale,
                     rotation: Float.random(in: 0..<(2 * .pi)),
                     angularBlend: angularBlend,
                     angularVelocity: ringAngularVelocity(angularBlend: angularBlend, progress: 0)
@@ -131,8 +133,8 @@ final class ParticleSystem {
 
         for _ in 0..<BAEffect.shards.clickCount {
             let angle = Float.random(in: 0..<(2 * .pi))
-            let speed = Float.random(in: speedRange) * scale
-            let radius = BAEffect.shards.clickRadius * scale
+            let speed = Float.random(in: speedRange) * scale * shardScale
+            let radius = BAEffect.shards.clickRadius * scale * shardScale
             let velocity = SIMD2<Float>(cos(angle), sin(angle)) * speed
             shards.append(
                 ShardParticle(
@@ -140,7 +142,7 @@ final class ParticleSystem {
                     velocity: velocity,
                     ageMs: 0,
                     lifetimeMs: Double(Float.random(in: lifetimeRange)),
-                    size: Float.random(in: sizeRange) * scale,
+                    size: Float.random(in: sizeRange) * scale * shardScale,
                     textureFrame: Int.random(in: 0...1)
                 )
             )
@@ -170,8 +172,8 @@ final class ParticleSystem {
 
     private func spawnTrailShard(at position: SIMD2<Float>) {
         let angle = Float.random(in: 0..<(2 * .pi))
-        let speed = Float.random(in: BAEffect.shards.trailSpeedMin...BAEffect.shards.trailSpeedMax) * scale
-        let radius = BAEffect.shards.trailRadius * scale
+        let speed = Float.random(in: BAEffect.shards.trailSpeedMin...BAEffect.shards.trailSpeedMax) * scale * shardScale
+        let radius = BAEffect.shards.trailRadius * scale * shardScale
         let direction = SIMD2<Float>(cos(angle), sin(angle))
         let lifetime = Float.random(in: BAEffect.shards.trailLifetimeMinMs...BAEffect.shards.trailLifetimeMaxMs)
 
@@ -181,7 +183,7 @@ final class ParticleSystem {
                 velocity: direction * speed,
                 ageMs: 0,
                 lifetimeMs: Double(lifetime),
-                size: Float.random(in: BAEffect.shards.sizeMin...BAEffect.shards.sizeMax) * scale,
+                size: Float.random(in: BAEffect.shards.sizeMin...BAEffect.shards.sizeMax) * scale * shardScale,
                 textureFrame: Int.random(in: 0...1)
             )
         )

@@ -62,6 +62,8 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var bloomTexture: MTLTexture?
     private var blurFilter: MPSImageGaussianBlur?
     private var sceneSize: CGSize = .zero
+    private var settings: FXSettings
+    private var lastSettingsReload: TimeInterval = 0
 
     private var viewportSize = SIMD2<Float>(1, 1)
     private var scale: Float = 1
@@ -87,7 +89,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         // Bloom overlay pass is still under investigation (it can blank the
         // window), so it is opt-in via BA_ENABLE_BLOOM=1 and off by default.
         self.bloomEnabled = getenv("BA_ENABLE_BLOOM") != nil
-        dlog("[renderer] bloomEnabled=\(self.bloomEnabled)")
+        self.settings = FXSettings.load()
+        particleSystem.ringScale = settings.ringScale
+        particleSystem.shardScale = settings.shardScale
+        dlog("[renderer] bloomEnabled=\(self.bloomEnabled) settings=disk\(settings.diskScale) ring\(settings.ringScale)")
 
         let samplerDescriptor = MTLSamplerDescriptor()
         samplerDescriptor.minFilter = .linear
@@ -188,6 +193,15 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     func draw(in view: MTKView) {
         let now = CACurrentMediaTime()
+
+        // Reload settings.json every 0.5s so the user can tune live.
+        if now - lastSettingsReload > 0.5 {
+            settings = FXSettings.load()
+            particleSystem.ringScale = settings.ringScale
+            particleSystem.shardScale = settings.shardScale
+            lastSettingsReload = now
+        }
+
         particleSystem.update(now: now)
 
         var diskVertices: [TexturedVertex] = []
@@ -255,7 +269,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder.setRenderPipelineState(bloomAddPipeline)
             encoder.setFragmentTexture(bloom, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
-            var strength: Float = 2.0
+            var strength: Float = settings.bloomStrength
             encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
@@ -301,7 +315,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             let alpha = BAEval.number(BAEffect.disk.alphaKeys, progress)
             guard alpha > 0.01 else { continue }
 
-            let size = BAEffect.disk.radius * BAEval.hermite(BAEffect.disk.sizeKeys, progress) * scale
+            let size = BAEffect.disk.radius * settings.diskScale * BAEval.hermite(BAEffect.disk.sizeKeys, progress) * scale
             let color = BAEval.color(BAEffect.disk.colorKeys, progress)
             let material = Renderer.linearEnergy(color, intensity: BAEffect.disk.emission)
             appendTexturedSprite(
@@ -390,7 +404,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             distances.append(distances[i - 1] + simd_distance(points[i - 1].position, points[i].position))
         }
 
-        let halfWidth = BAEffect.trail.width * scale * 0.5
+        let halfWidth = BAEffect.trail.width * settings.trailScale * scale * 0.5
         let materialIntensity: Float = 23.968628
 
         for i in 1..<points.count {

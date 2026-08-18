@@ -122,9 +122,9 @@ enum BAEffect {
     enum rings {
         static let count = 2
         static let lifetimeMs: Float = 600
-        // Ring ~ outer radius close to the disk's radius so they read as equal.
-        static let radiusMin: Float = 0.12 * worldToReferencePixels * ringMeshOuterRadius * 0.9
-        static let radiusMax: Float = 0.14 * worldToReferencePixels * ringMeshOuterRadius * 0.9
+        // Raw Unity radii; runtime scale applied via settings.ringScale.
+        static let radiusMin: Float = 0.12 * worldToReferencePixels * ringMeshOuterRadius
+        static let radiusMax: Float = 0.14 * worldToReferencePixels * ringMeshOuterRadius
         static let angularVelocityMinKeys: [[Float]] = [
             [0.14903903, 1],
             [1, 0.45561826]
