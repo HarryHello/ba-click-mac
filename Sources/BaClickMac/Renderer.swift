@@ -176,83 +176,35 @@ final class Renderer: NSObject, MTKViewDelegate {
         let now = CACurrentMediaTime()
         particleSystem.update(now: now)
 
-        guard let drawable = view.currentDrawable,
-              let commandBuffer = commandQueue.makeCommandBuffer() else {
+        guard let renderPassDescriptor = view.currentRenderPassDescriptor,
+              let drawable = view.currentDrawable,
+              let commandBuffer = commandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             return
         }
+
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        renderPassDescriptor.colorAttachments[0].loadAction = .clear
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
 
         var diskVertices: [TexturedVertex] = []
         var ringVertices: [RingVertex] = []
         var triangleVertices: [TexturedVertex] = []
         var trailVertices: [TexturedVertex] = []
+        var glowVertices: [TexturedVertex] = []
 
-        appendDisks(to: &diskVertices)
-        appendRings(to: &ringVertices)
+        appendDisks(to: &diskVertices, glow: &glowVertices)
+        appendRings(to: &ringVertices, glow: &glowVertices)
         appendShards(to: &triangleVertices)
-        appendTrail(to: &trailVertices)
+        appendTrail(to: &trailVertices, glow: &glowVertices)
 
-        // If bloom targets are available, render the effect to an offscreen
-        // scene, blur it, then composite scene + bloom onto the transparent
-        // overlay. Otherwise draw directly (no glow).
-        if let scene = sceneTexture, let bloom = bloomTexture, let blur = blurFilter {
-            let scenePass = MTLRenderPassDescriptor()
-            scenePass.colorAttachments[0].texture = scene
-            scenePass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-            scenePass.colorAttachments[0].loadAction = .clear
-            scenePass.colorAttachments[0].storeAction = .store
-            if let sceneEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: scenePass) {
-                // Triangle shards are NOT bloomed in the original effect, so
-                // they are excluded from the scene/blur and drawn on top later.
-                drawParticles(
-                    disk: diskVertices,
-                    ring: ringVertices,
-                    triangle: [],
-                    trail: trailVertices,
-                    encoder: sceneEncoder,
-                    sceneTarget: true
-                )
-                sceneEncoder.endEncoding()
-            }
+        encoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
 
-            blur.encode(commandBuffer: commandBuffer, sourceTexture: scene, destinationTexture: bloom)
+        // Soft artificial halo pass (direct rendering, no offscreen target).
+        var glowEmission: Float = 0.35
+        encoder.setFragmentBytes(&glowEmission, length: MemoryLayout<Float>.size, index: 2)
+        drawTextured(vertices: glowVertices, texture: circleTexture, pipeline: diskPipeline, encoder: encoder)
 
-            guard let renderPassDescriptor = view.currentRenderPassDescriptor,
-                  let compositeEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-                return
-            }
-            renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-            renderPassDescriptor.colorAttachments[0].loadAction = .clear
-            renderPassDescriptor.colorAttachments[0].storeAction = .store
-
-            compositeEncoder.setRenderPipelineState(compositePipeline)
-            compositeEncoder.setFragmentTexture(scene, index: 0)
-            compositeEncoder.setFragmentTexture(bloom, index: 1)
-            compositeEncoder.setFragmentSamplerState(sampler, index: 0)
-            var bloomStrength: Float = 0.6
-            compositeEncoder.setFragmentBytes(&bloomStrength, length: MemoryLayout<Float>.size, index: 0)
-            compositeEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-
-            // Draw un-bloomed triangle shards directly on top.
-            if !triangleVertices.isEmpty {
-                compositeEncoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
-                drawTextured(vertices: triangleVertices, texture: triangleTexture, pipeline: trianglePipeline, encoder: compositeEncoder)
-            }
-
-            compositeEncoder.endEncoding()
-
-            commandBuffer.present(drawable)
-            commandBuffer.commit()
-            return
-        }
-
-        // Fallback: no bloom targets, render particles straight to the window.
-        guard let renderPassDescriptor = view.currentRenderPassDescriptor,
-              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            return
-        }
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-        renderPassDescriptor.colorAttachments[0].loadAction = .clear
-        renderPassDescriptor.colorAttachments[0].storeAction = .store
         drawParticles(
             disk: diskVertices,
             ring: ringVertices,
@@ -260,6 +212,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             trail: trailVertices,
             encoder: encoder
         )
+
         encoder.endEncoding()
         commandBuffer.present(drawable)
         commandBuffer.commit()
@@ -293,7 +246,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     // MARK: - Geometry building
 
-    private func appendDisks(to vertices: inout [TexturedVertex]) {
+    private func appendDisks(to vertices: inout [TexturedVertex], glow: inout [TexturedVertex]) {
         for burst in particleSystem.bursts {
             let progress = Float(burst.ageMs / Double(BAEffect.disk.lifetimeMs))
             guard progress >= 0, progress < 1 else { continue }
@@ -315,10 +268,21 @@ final class Renderer: NSObject, MTKViewDelegate {
                 coverageFactor: 1,
                 to: &vertices
             )
+            appendTexturedSprite(
+                center: burst.position,
+                size: size * 2.6,
+                angle: burst.diskRotation,
+                uvMin: SIMD2(0, 0),
+                uvMax: SIMD2(1, 1),
+                color: material,
+                particleAlpha: alpha * 0.18,
+                coverageFactor: 1,
+                to: &glow
+            )
         }
     }
 
-    private func appendRings(to vertices: inout [RingVertex]) {
+    private func appendRings(to vertices: inout [RingVertex], glow: inout [TexturedVertex]) {
         for burst in particleSystem.bursts {
             let progress = Float(burst.ageMs / Double(BAEffect.rings.lifetimeMs))
             guard progress >= 0, progress < 1 else { continue }
@@ -343,6 +307,18 @@ final class Renderer: NSObject, MTKViewDelegate {
                     dissolveThreshold: dissolve,
                     coverageOpacity: 1,
                     to: &vertices
+                )
+                // Soft halo behind the ring.
+                appendTexturedSprite(
+                    center: burst.position,
+                    size: outerRadius * 1.6,
+                    angle: 0,
+                    uvMin: SIMD2(0, 0),
+                    uvMax: SIMD2(1, 1),
+                    color: material,
+                    particleAlpha: 0.10,
+                    coverageFactor: 1,
+                    to: &glow
                 )
             }
         }
@@ -376,7 +352,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
-    private func appendTrail(to vertices: inout [TexturedVertex]) {
+    private func appendTrail(to vertices: inout [TexturedVertex], glow: inout [TexturedVertex]) {
         let points = particleSystem.trail
         guard points.count >= 2 else { return }
 
@@ -431,6 +407,21 @@ final class Renderer: NSObject, MTKViewDelegate {
             let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: PackedFloat3(fromColor), particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: fromCoverage)
 
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
+
+            let midProgress = (fromProgress + toProgress) * 0.5
+            let midColor = (fromColor + toColor) * 0.5
+            appendTexturedSprite(
+                center: (from.position + to.position) * 0.5,
+                size: halfWidth * 5,
+                angle: 0,
+                uvMin: SIMD2(0, 0),
+                uvMax: SIMD2(1, 1),
+                color: midColor,
+                particleAlpha: 0.10,
+                coverageFactor: 1,
+                to: &glow
+            )
+            _ = midProgress
         }
     }
 
@@ -600,7 +591,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             height: Int(pixelSize.height),
             mipmapped: false
         )
-        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.usage = [.renderTarget, .shaderRead, .shaderWrite]
         sceneTexture = device.makeTexture(descriptor: descriptor)
         bloomTexture = device.makeTexture(descriptor: descriptor)
         blurFilter = MPSImageGaussianBlur(device: device, sigma: 4)
