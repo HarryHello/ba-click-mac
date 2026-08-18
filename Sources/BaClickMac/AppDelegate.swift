@@ -57,6 +57,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = overlayView
         window.orderFrontRegardless()
 
+        // Re-apply transparency after the view is attached to the window; the
+        // CAMetalLayer can reset its opaque/background state during attach.
+        DispatchQueue.main.async { [weak overlayView] in
+            overlayView?.wantsLayer = true
+            overlayView?.layer?.isOpaque = false
+            overlayView?.layer?.backgroundColor = NSColor.clear.cgColor
+        }
+
         // Capture global mouse events. The overlay itself ignores mouse events,
         // so we observe them system-wide and feed the effect manually.
         let monitor = MouseMonitor(screenFrame: frame)
