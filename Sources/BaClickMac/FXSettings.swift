@@ -7,8 +7,8 @@ struct FXSettings: Codable {
     var ringScale: Float = 0.85
     var shardScale: Float = 1.0
     var trailScale: Float = 1.0
-    var bloomStrength: Float = 0.8
-    var bloomSigma: Float = 12.0
+    var bloomStrength: Float = 2.0
+    var bloomSigma: Float = 8.0
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()
