@@ -7,8 +7,12 @@ struct FXSettings: Codable {
     var ringScale: Float = 0.85
     var shardScale: Float = 1.0
     var trailScale: Float = 1.0
-    var bloomStrength: Float = 2.0
-    var bloomSigma: Float = 8.0
+    // Click (disk + rings) bloom is intentionally weaker and wider than the
+    // trail bloom so the click glow doesn't over-brighten the disk.
+    var clickBloomStrength: Float = 1.0
+    var clickBloomSigma: Float = 14.0
+    var trailBloomStrength: Float = 2.0
+    var trailBloomSigma: Float = 8.0
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()

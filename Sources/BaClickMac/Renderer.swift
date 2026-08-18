@@ -58,13 +58,17 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let triangleTexture: MTLTexture
     private let trailTexture: MTLTexture
 
-    private var sceneTexture: MTLTexture?
-    private var bloomTexture: MTLTexture?
-    private var blurFilter: MPSImageGaussianBlur?
+    private var clickSceneTexture: MTLTexture?
+    private var clickBloomTexture: MTLTexture?
+    private var trailSceneTexture: MTLTexture?
+    private var trailBloomTexture: MTLTexture?
+    private var clickBlurFilter: MPSImageGaussianBlur?
+    private var trailBlurFilter: MPSImageGaussianBlur?
     private var sceneSize: CGSize = .zero
     private(set) var settings: FXSettings
     private var lastSettingsReload: TimeInterval = 0
-    private var currentBloomSigma: Float = 0
+    private var currentClickSigma: Float = 0
+    private var currentTrailSigma: Float = 0
 
     private var viewportSize = SIMD2<Float>(1, 1)
     private var scale: Float = 1
@@ -199,9 +203,13 @@ final class Renderer: NSObject, MTKViewDelegate {
             settings = FXSettings.load()
             particleSystem.ringScale = settings.ringScale
             particleSystem.shardScale = settings.shardScale
-            if settings.bloomSigma != currentBloomSigma {
-                currentBloomSigma = settings.bloomSigma
-                blurFilter = MPSImageGaussianBlur(device: device, sigma: settings.bloomSigma)
+            if settings.clickBloomSigma != currentClickSigma {
+                currentClickSigma = settings.clickBloomSigma
+                clickBlurFilter = MPSImageGaussianBlur(device: device, sigma: settings.clickBloomSigma)
+            }
+            if settings.trailBloomSigma != currentTrailSigma {
+                currentTrailSigma = settings.trailBloomSigma
+                trailBlurFilter = MPSImageGaussianBlur(device: device, sigma: settings.trailBloomSigma)
             }
             lastSettingsReload = now
         }
@@ -222,34 +230,55 @@ final class Renderer: NSObject, MTKViewDelegate {
             return
         }
 
-        // 1) Render the glow-eligible parts (disk/ring/trail, no triangles) to
-        //    an offscreen HDR scene and blur it into the bloom texture.
+        // 1) Render click bloom (disk+rings) and trail bloom separately so they
+        //    can use independent strength/sigma settings.
         if bloomEnabled,
-           let scene = sceneTexture,
-           let bloom = bloomTexture,
-           let blur = blurFilter {
-            let scenePass = MTLRenderPassDescriptor()
-            scenePass.colorAttachments[0].texture = scene
-            scenePass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-            scenePass.colorAttachments[0].loadAction = .clear
-            scenePass.colorAttachments[0].storeAction = .store
-            if let sceneEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: scenePass) {
+           let clickScene = clickSceneTexture,
+           let clickBloom = clickBloomTexture,
+           let clickBlur = clickBlurFilter,
+           let trailScene = trailSceneTexture,
+           let trailBloom = trailBloomTexture,
+           let trailBlur = trailBlurFilter {
+
+            let clickPass = MTLRenderPassDescriptor()
+            clickPass.colorAttachments[0].texture = clickScene
+            clickPass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            clickPass.colorAttachments[0].loadAction = .clear
+            clickPass.colorAttachments[0].storeAction = .store
+            if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: clickPass) {
                 drawParticles(
                     disk: diskVertices,
                     ring: ringVertices,
                     triangle: [],
-                    trail: trailVertices,
-                    encoder: sceneEncoder,
+                    trail: [],
+                    encoder: encoder,
                     sceneTarget: true
                 )
-                sceneEncoder.endEncoding()
+                encoder.endEncoding()
             }
-            blur.encode(commandBuffer: commandBuffer, sourceTexture: scene, destinationTexture: bloom)
+            clickBlur.encode(commandBuffer: commandBuffer, sourceTexture: clickScene, destinationTexture: clickBloom)
+
+            let trailPass = MTLRenderPassDescriptor()
+            trailPass.colorAttachments[0].texture = trailScene
+            trailPass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            trailPass.colorAttachments[0].loadAction = .clear
+            trailPass.colorAttachments[0].storeAction = .store
+            if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: trailPass) {
+                drawParticles(
+                    disk: [],
+                    ring: [],
+                    triangle: [],
+                    trail: trailVertices,
+                    encoder: encoder,
+                    sceneTarget: true
+                )
+                encoder.endEncoding()
+            }
+            trailBlur.encode(commandBuffer: commandBuffer, sourceTexture: trailScene, destinationTexture: trailBloom)
         }
 
         // 2) Always draw the core effect directly to the window, then add the
-        //    blurred bloom on top. If the bloom path silently fails, the core
-        //    effect is still visible.
+        //    blurred blooms on top.
         guard let renderPassDescriptor = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
@@ -269,11 +298,18 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder: encoder
         )
 
-        if bloomEnabled, let bloom = bloomTexture {
+        if bloomEnabled, let clickBloom = clickBloomTexture, let trailBloom = trailBloomTexture {
             encoder.setRenderPipelineState(bloomAddPipeline)
-            encoder.setFragmentTexture(bloom, index: 0)
+            encoder.setFragmentTexture(clickBloom, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
-            var strength: Float = settings.bloomStrength
+            var strength = settings.clickBloomStrength
+            encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+
+            encoder.setRenderPipelineState(bloomAddPipeline)
+            encoder.setFragmentTexture(trailBloom, index: 0)
+            encoder.setFragmentSamplerState(sampler, index: 0)
+            strength = settings.trailBloomStrength
             encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
@@ -608,7 +644,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         guard pixelSize.width > 0, pixelSize.height > 0 else { return }
 
-        if sceneTexture != nil && bloomTexture != nil && sceneSize.width == pixelSize.width && sceneSize.height == pixelSize.height {
+        if clickSceneTexture != nil && clickBloomTexture != nil &&
+            trailSceneTexture != nil && trailBloomTexture != nil &&
+            sceneSize.width == pixelSize.width && sceneSize.height == pixelSize.height {
             return
         }
 
@@ -620,10 +658,14 @@ final class Renderer: NSObject, MTKViewDelegate {
             mipmapped: false
         )
         descriptor.usage = [.renderTarget, .shaderRead, .shaderWrite]
-        sceneTexture = device.makeTexture(descriptor: descriptor)
-        bloomTexture = device.makeTexture(descriptor: descriptor)
-        currentBloomSigma = settings.bloomSigma
-        blurFilter = MPSImageGaussianBlur(device: device, sigma: settings.bloomSigma)
+        clickSceneTexture = device.makeTexture(descriptor: descriptor)
+        clickBloomTexture = device.makeTexture(descriptor: descriptor)
+        trailSceneTexture = device.makeTexture(descriptor: descriptor)
+        trailBloomTexture = device.makeTexture(descriptor: descriptor)
+        currentClickSigma = settings.clickBloomSigma
+        currentTrailSigma = settings.trailBloomSigma
+        clickBlurFilter = MPSImageGaussianBlur(device: device, sigma: settings.clickBloomSigma)
+        trailBlurFilter = MPSImageGaussianBlur(device: device, sigma: settings.trailBloomSigma)
     }
 
     // MARK: - Helpers
