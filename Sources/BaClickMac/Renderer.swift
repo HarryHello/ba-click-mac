@@ -50,6 +50,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let trailPipeline: MTLRenderPipelineState
     private let trianglePipeline: MTLRenderPipelineState
     private let compositePipeline: MTLRenderPipelineState
+    private let bloomAddPipeline: MTLRenderPipelineState
 
     private let circleTexture: MTLTexture
     private let ringTexture: MTLTexture
@@ -75,7 +76,8 @@ final class Renderer: NSObject, MTKViewDelegate {
               let triangleFragment = library.makeFunction(name: "triangle_fragment"),
               let trailFragment = library.makeFunction(name: "trail_fragment"),
               let fullscreenVertex = library.makeFunction(name: "fullscreen_vertex"),
-              let compositeFragment = library.makeFunction(name: "composite_fragment") else {
+              let compositeFragment = library.makeFunction(name: "composite_fragment"),
+              let bloomAddFragment = library.makeFunction(name: "bloom_add_fragment") else {
             return nil
         }
 
@@ -156,6 +158,12 @@ final class Renderer: NSObject, MTKViewDelegate {
                 fragmentFunction: compositeFragment,
                 pixelFormat: view.colorPixelFormat
             )
+            self.bloomAddPipeline = try Renderer.makeAdditivePipeline(
+                device: device,
+                vertexFunction: fullscreenVertex,
+                fragmentFunction: bloomAddFragment,
+                pixelFormat: view.colorPixelFormat
+            )
         } catch {
             return nil
         }
@@ -177,34 +185,57 @@ final class Renderer: NSObject, MTKViewDelegate {
         let now = CACurrentMediaTime()
         particleSystem.update(now: now)
 
-        guard let renderPassDescriptor = view.currentRenderPassDescriptor,
-              let drawable = view.currentDrawable,
-              let commandBuffer = commandQueue.makeCommandBuffer(),
-              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            return
-        }
-
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-        renderPassDescriptor.colorAttachments[0].loadAction = .clear
-        renderPassDescriptor.colorAttachments[0].storeAction = .store
-
         var diskVertices: [TexturedVertex] = []
         var ringVertices: [RingVertex] = []
         var triangleVertices: [TexturedVertex] = []
         var trailVertices: [TexturedVertex] = []
-        var glowVertices: [TexturedVertex] = []
 
-        appendDisks(to: &diskVertices, glow: &glowVertices)
-        appendRings(to: &ringVertices, glow: &glowVertices)
+        appendDisks(to: &diskVertices)
+        appendRings(to: &ringVertices)
         appendShards(to: &triangleVertices)
-        appendTrail(to: &trailVertices, glow: &glowVertices)
+        appendTrail(to: &trailVertices)
+
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            return
+        }
+
+        // 1) Render the glow-eligible parts (disk/ring/trail, no triangles) to
+        //    an offscreen HDR scene and blur it into the bloom texture.
+        if let scene = sceneTexture,
+           let bloom = bloomTexture,
+           let blur = blurFilter {
+            let scenePass = MTLRenderPassDescriptor()
+            scenePass.colorAttachments[0].texture = scene
+            scenePass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            scenePass.colorAttachments[0].loadAction = .clear
+            scenePass.colorAttachments[0].storeAction = .store
+            if let sceneEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: scenePass) {
+                drawParticles(
+                    disk: diskVertices,
+                    ring: ringVertices,
+                    triangle: [],
+                    trail: trailVertices,
+                    encoder: sceneEncoder,
+                    sceneTarget: true
+                )
+                sceneEncoder.endEncoding()
+            }
+            blur.encode(commandBuffer: commandBuffer, sourceTexture: scene, destinationTexture: bloom)
+        }
+
+        // 2) Always draw the core effect directly to the window, then add the
+        //    blurred bloom on top. If the bloom path silently fails, the core
+        //    effect is still visible.
+        guard let renderPassDescriptor = view.currentRenderPassDescriptor,
+              let drawable = view.currentDrawable,
+              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            return
+        }
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        renderPassDescriptor.colorAttachments[0].loadAction = .clear
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
 
         encoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
-
-        // Soft artificial halo pass (direct rendering, no offscreen target).
-        var glowEmission: Float = 0.9
-        encoder.setFragmentBytes(&glowEmission, length: MemoryLayout<Float>.size, index: 2)
-        drawTextured(vertices: glowVertices, texture: circleTexture, pipeline: diskPipeline, encoder: encoder)
 
         drawParticles(
             disk: diskVertices,
@@ -213,6 +244,15 @@ final class Renderer: NSObject, MTKViewDelegate {
             trail: trailVertices,
             encoder: encoder
         )
+
+        if let bloom = bloomTexture {
+            encoder.setRenderPipelineState(bloomAddPipeline)
+            encoder.setFragmentTexture(bloom, index: 0)
+            encoder.setFragmentSamplerState(sampler, index: 0)
+            var strength: Float = 1.6
+            encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        }
 
         encoder.endEncoding()
         commandBuffer.present(drawable)
@@ -247,7 +287,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     // MARK: - Geometry building
 
-    private func appendDisks(to vertices: inout [TexturedVertex], glow: inout [TexturedVertex]) {
+    private func appendDisks(to vertices: inout [TexturedVertex]) {
         for burst in particleSystem.bursts {
             let progress = Float(burst.ageMs / Double(BAEffect.disk.lifetimeMs))
             guard progress >= 0, progress < 1 else { continue }
@@ -269,21 +309,10 @@ final class Renderer: NSObject, MTKViewDelegate {
                 coverageFactor: 1,
                 to: &vertices
             )
-            appendTexturedSprite(
-                center: burst.position,
-                size: size * 3.0,
-                angle: burst.diskRotation,
-                uvMin: SIMD2(0, 0),
-                uvMax: SIMD2(1, 1),
-                color: material,
-                particleAlpha: alpha * 0.30,
-                coverageFactor: 1,
-                to: &glow
-            )
         }
     }
 
-    private func appendRings(to vertices: inout [RingVertex], glow: inout [TexturedVertex]) {
+    private func appendRings(to vertices: inout [RingVertex]) {
         for burst in particleSystem.bursts {
             let progress = Float(burst.ageMs / Double(BAEffect.rings.lifetimeMs))
             guard progress >= 0, progress < 1 else { continue }
@@ -308,18 +337,6 @@ final class Renderer: NSObject, MTKViewDelegate {
                     dissolveThreshold: dissolve,
                     coverageOpacity: 1,
                     to: &vertices
-                )
-                // Soft halo behind the ring.
-                appendTexturedSprite(
-                    center: burst.position,
-                    size: outerRadius * 1.9,
-                    angle: 0,
-                    uvMin: SIMD2(0, 0),
-                    uvMax: SIMD2(1, 1),
-                    color: material,
-                    particleAlpha: 0.22,
-                    coverageFactor: 1,
-                    to: &glow
                 )
             }
         }
@@ -353,7 +370,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
-    private func appendTrail(to vertices: inout [TexturedVertex], glow: inout [TexturedVertex]) {
+    private func appendTrail(to vertices: inout [TexturedVertex]) {
         let points = particleSystem.trail
         guard points.count >= 2 else { return }
 
@@ -408,19 +425,6 @@ final class Renderer: NSObject, MTKViewDelegate {
             let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: fromCoverage)
 
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
-
-            let midColor = (fromColor + toColor) * 0.5
-            appendTexturedSprite(
-                center: (from.position + to.position) * 0.5,
-                size: halfWidth * 8,
-                angle: 0,
-                uvMin: SIMD2(0, 0),
-                uvMax: SIMD2(1, 1),
-                color: midColor,
-                particleAlpha: 0.25,
-                coverageFactor: 1,
-                to: &glow
-            )
         }
     }
 
@@ -617,6 +621,31 @@ final class Renderer: NSObject, MTKViewDelegate {
         attachment.sourceAlphaBlendFactor = .one
         attachment.destinationRGBBlendFactor = .one
         attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
+
+        return try device.makeRenderPipelineState(descriptor: descriptor)
+    }
+
+    /// Pipeline that adds bloom light on top of the existing frame without
+    /// changing the window alpha.
+    private static func makeAdditivePipeline(
+        device: MTLDevice,
+        vertexFunction: MTLFunction,
+        fragmentFunction: MTLFunction,
+        pixelFormat: MTLPixelFormat
+    ) throws -> MTLRenderPipelineState {
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = vertexFunction
+        descriptor.fragmentFunction = fragmentFunction
+        descriptor.colorAttachments[0].pixelFormat = pixelFormat
+
+        let attachment = descriptor.colorAttachments[0]!
+        attachment.isBlendingEnabled = true
+        attachment.rgbBlendOperation = .add
+        attachment.alphaBlendOperation = .add
+        attachment.sourceRGBBlendFactor = .one
+        attachment.sourceAlphaBlendFactor = .zero
+        attachment.destinationRGBBlendFactor = .one
+        attachment.destinationAlphaBlendFactor = .one
 
         return try device.makeRenderPipelineState(descriptor: descriptor)
     }

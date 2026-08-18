@@ -171,5 +171,17 @@ enum ShaderSource {
         float alpha = clamp(max(s.a, maxColor), 0.0, 1.0);
         return float4(color * alpha, alpha);
     }
+
+    // Additive bloom overlay: adds blurred scene light on top of the already
+    // drawn core effect without touching the window alpha.
+    fragment float4 bloom_add_fragment(
+        FullscreenOut in [[stage_in]],
+        texture2d<float> bloom [[texture(0)]],
+        sampler samp [[sampler(0)]],
+        constant float &strength [[buffer(0)]]
+    ) {
+        float4 b = bloom.sample(samp, in.uv);
+        return float4(b.rgb * max(strength, 0.0), 0.0);
+    }
     """
 }
