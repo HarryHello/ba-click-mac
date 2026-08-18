@@ -64,6 +64,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var sceneSize: CGSize = .zero
     private var settings: FXSettings
     private var lastSettingsReload: TimeInterval = 0
+    private var currentBloomSigma: Float = 0
 
     private var viewportSize = SIMD2<Float>(1, 1)
     private var scale: Float = 1
@@ -198,6 +199,10 @@ final class Renderer: NSObject, MTKViewDelegate {
             settings = FXSettings.load()
             particleSystem.ringScale = settings.ringScale
             particleSystem.shardScale = settings.shardScale
+            if settings.bloomSigma != currentBloomSigma {
+                currentBloomSigma = settings.bloomSigma
+                blurFilter = MPSImageGaussianBlur(device: device, sigma: settings.bloomSigma)
+            }
             lastSettingsReload = now
         }
 
@@ -617,7 +622,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         descriptor.usage = [.renderTarget, .shaderRead, .shaderWrite]
         sceneTexture = device.makeTexture(descriptor: descriptor)
         bloomTexture = device.makeTexture(descriptor: descriptor)
-        blurFilter = MPSImageGaussianBlur(device: device, sigma: 4)
+        currentBloomSigma = settings.bloomSigma
+        blurFilter = MPSImageGaussianBlur(device: device, sigma: settings.bloomSigma)
     }
 
     // MARK: - Helpers
