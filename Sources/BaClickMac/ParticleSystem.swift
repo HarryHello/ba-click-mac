@@ -43,6 +43,8 @@ final class ParticleSystem {
     private var scale: Float = 1
     private var lastTime: Double = 0
     private var lastTrailPoint: SIMD2<Float> = .zero
+    private var lastPointerPosition: SIMD2<Float>?
+    private var trailDistanceSinceShard: Float = 0
 
     func setViewportHeight(_ height: CGFloat) {
         scale = Float(max(height, 1) / 1080.0)
@@ -53,9 +55,20 @@ final class ParticleSystem {
     }
 
     func addTrailPoint(at position: SIMD2<Float>) {
+        let now = CACurrentMediaTime()
+
+        if let previous = lastPointerPosition {
+            let delta = position - previous
+            let length = simd_length(delta)
+            if length > 0 {
+                spawnTrailShards(from: previous, to: position, distance: length)
+            }
+        }
+        lastPointerPosition = position
+
         let minDistance = BAEffect.trail.minVertexDistance * scale
         if trail.isEmpty || simd_distance(lastTrailPoint, position) >= minDistance {
-            trail.append(TrailPoint(position: position, time: CACurrentMediaTime()))
+            trail.append(TrailPoint(position: position, time: now))
             lastTrailPoint = position
         }
     }
@@ -132,6 +145,46 @@ final class ParticleSystem {
                 )
             )
         }
+    }
+
+    private func spawnTrailShards(from: SIMD2<Float>, to: SIMD2<Float>, distance: Float) {
+        let spacing = max(1, BAEffect.shards.trailSpacing * scale)
+        let combined = trailDistanceSinceShard + distance
+        let strides = Int(combined / spacing)
+        guard strides > 0, shards.count < BAEffect.shards.maxCount else {
+            trailDistanceSinceShard = combined.truncatingRemainder(dividingBy: spacing)
+            return
+        }
+
+        for stride in 0..<strides {
+            let travelled = spacing - trailDistanceSinceShard + Float(stride) * spacing
+            let progress = min(1, travelled / distance)
+            let position = from + (to - from) * progress
+            spawnTrailShard(at: position)
+            if shards.count >= BAEffect.shards.maxCount {
+                break
+            }
+        }
+        trailDistanceSinceShard = combined.truncatingRemainder(dividingBy: spacing)
+    }
+
+    private func spawnTrailShard(at position: SIMD2<Float>) {
+        let angle = Float.random(in: 0..<(2 * .pi))
+        let speed = Float.random(in: BAEffect.shards.trailSpeedMin...BAEffect.shards.trailSpeedMax) * scale
+        let radius = BAEffect.shards.trailRadius * scale
+        let direction = SIMD2<Float>(cos(angle), sin(angle))
+        let lifetime = Float.random(in: BAEffect.shards.trailLifetimeMinMs...BAEffect.shards.trailLifetimeMaxMs)
+
+        shards.append(
+            ShardParticle(
+                position: position + direction * radius,
+                velocity: direction * speed,
+                ageMs: 0,
+                lifetimeMs: Double(lifetime),
+                size: Float.random(in: BAEffect.shards.sizeMin...BAEffect.shards.sizeMax) * scale,
+                textureFrame: Int.random(in: 0...1)
+            )
+        )
     }
 
     private func ringAngularVelocity(angularBlend: Float, progress: Float) -> Float {

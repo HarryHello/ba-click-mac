@@ -200,12 +200,17 @@ final class Renderer: NSObject, MTKViewDelegate {
             let color = BAEval.color(BAEffect.rings.colorKeys, progress)
             let material = Renderer.linearEnergy(color, intensity: BAEffect.rings.hdrIntensity)
 
+            let widthMultiplier = BAEval.lerp(BAEffect.rings.widthStart, BAEffect.rings.widthEnd, progress)
+
             for ring in burst.rings {
-                let radius = ring.radius * sizeFactor
-                appendRingSprite(
+                let outerRadius = ring.radius * sizeFactor
+                let width = outerRadius * BAEffect.rings.bandToOuterRadius * widthMultiplier
+                let radius = outerRadius - width * 0.5
+                appendRingGeometry(
                     center: burst.position,
                     radius: radius,
-                    angle: ring.rotation,
+                    width: width,
+                    rotation: ring.rotation,
                     color: material,
                     dissolveThreshold: dissolve,
                     coverageOpacity: 1,
@@ -335,34 +340,56 @@ final class Renderer: NSObject, MTKViewDelegate {
         vertices.append(contentsOf: [tri[0], tri[1], tri[2], tri[0], tri[2], tri[3]])
     }
 
-    private func appendRingSprite(
+    private func appendRingGeometry(
         center: SIMD2<Float>,
         radius: Float,
-        angle: Float,
+        width: Float,
+        rotation: Float,
         color: SIMD3<Float>,
         dissolveThreshold: Float,
         coverageOpacity: Float,
         to vertices: inout [RingVertex]
     ) {
-        let half = radius
-        let c = cos(angle)
-        let s = sin(angle)
-        let corners: [(SIMD2<Float>, SIMD2<Float>)] = [
-            (SIMD2(-half, -half), SIMD2(0, 0)),
-            (SIMD2(half, -half), SIMD2(1, 0)),
-            (SIMD2(half, half), SIMD2(1, 1)),
-            (SIMD2(-half, half), SIMD2(0, 1))
-        ]
-        var tri: [RingVertex] = []
-        tri.reserveCapacity(4)
-        for (corner, uv) in corners {
-            let rotated = SIMD2(
-                corner.x * c - corner.y * s,
-                corner.x * s + corner.y * c
-            )
-            tri.append(RingVertex(position: center + rotated, uv: uv, color: color, dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity))
+        let bands = BAEffect.rings.radialSamples
+        let segments = BAEffect.rings.arcSamples
+        let innerEdge = radius - width * 0.5
+        let bandWidth = width / Float(bands)
+        let uvMin = BAEffect.rings.textureUvMin
+        let uvMax = BAEffect.rings.textureUvMax
+        let uvSpan = uvMax - uvMin
+        let direction: Float = BAEffect.rings.dissolveDirection >= 0 ? 1 : -1
+
+        vertices.reserveCapacity(bands * segments * 6)
+        for band in 0..<bands {
+            let innerRadius = innerEdge + bandWidth * Float(band)
+            let outerRadius = innerEdge + bandWidth * Float(band + 1)
+            let innerV = uvMin + uvSpan * Float(band) / Float(bands)
+            let outerV = uvMin + uvSpan * Float(band + 1) / Float(bands)
+
+            for segment in 0..<segments {
+                let angle0 = rotation + Float(segment) / Float(segments) * 2 * .pi
+                let angle1 = rotation + Float(segment + 1) / Float(segments) * 2 * .pi
+                let c0 = cos(angle0), s0 = sin(angle0)
+                let c1 = cos(angle1), s1 = sin(angle1)
+
+                let innerStart = center + SIMD2(c0 * innerRadius, s0 * innerRadius)
+                let innerEnd = center + SIMD2(c1 * innerRadius, s1 * innerRadius)
+                let outerStart = center + SIMD2(c0 * outerRadius, s0 * outerRadius)
+                let outerEnd = center + SIMD2(c1 * outerRadius, s1 * outerRadius)
+
+                let progress0 = Float(segment) / Float(segments)
+                let progress1 = Float(segment + 1) / Float(segments)
+                let u0 = uvMin + uvSpan * (direction > 0 ? progress0 : 1 - progress0)
+                let u1 = uvMin + uvSpan * (direction > 0 ? progress1 : 1 - progress1)
+
+                let v00 = RingVertex(position: innerStart, uv: SIMD2(u0, innerV), color: color, dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
+                let v01 = RingVertex(position: innerEnd, uv: SIMD2(u1, innerV), color: color, dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
+                let v11 = RingVertex(position: outerEnd, uv: SIMD2(u1, outerV), color: color, dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
+                let v10 = RingVertex(position: outerStart, uv: SIMD2(u0, outerV), color: color, dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
+
+                vertices.append(contentsOf: [v00, v01, v11, v00, v11, v10])
+            }
         }
-        vertices.append(contentsOf: [tri[0], tri[1], tri[2], tri[0], tri[2], tri[3]])
     }
 
     private func drawTextured(

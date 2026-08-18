@@ -134,6 +134,14 @@ enum BAEffect {
         ]
         static let angularVelocityMultiplier: Float = 11.170107
         static let rotationDirection: Float = -1
+        static let bandToOuterRadius: Float = 0.0598573766034603
+        static let widthStart: Float = 1
+        static let widthEnd: Float = 1
+        static let dissolveDirection: Float = 1
+        static let radialSamples = 8
+        static let arcSamples = 96
+        static let textureUvMin: Float = 0.0005
+        static let textureUvMax: Float = 0.9995
         static let hdrIntensity: Float = 5.992157
         static let colorKeys: [[Float]] = [
             [0.1117723, 255, 255, 255],
@@ -161,6 +169,13 @@ enum BAEffect {
         static let clickRadius: Float = 0.3 * shardUnit
         static let clickSpeedMin: Float = 0.3 * shardUnit
         static let clickSpeedMax: Float = 0.4 * shardUnit
+        static let trailRadius: Float = 0.15 * shardUnit
+        static let trailSpeedMin: Float = 0.2 * shardUnit
+        static let trailSpeedMax: Float = 0.3 * shardUnit
+        static let trailLifetimeMinMs: Float = 200
+        static let trailLifetimeMaxMs: Float = 400
+        static let trailSpacing: Float = worldToReferencePixels / 5
+        static let maxCount = 200
         static let sizeMin: Float = 0.1 * shardUnit
         static let sizeMax: Float = 0.2 * shardUnit
         static let sizeKeys: [[Float]] = [
