@@ -402,8 +402,20 @@ final class Renderer: NSObject, MTKViewDelegate {
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentTexture(texture, index: 0)
         encoder.setFragmentSamplerState(sampler, index: 0)
-        vertices.withUnsafeBytes { raw in
-            encoder.setVertexBytes(raw.baseAddress!, length: raw.count, index: 0)
+
+        let byteCount = MemoryLayout<TexturedVertex>.stride * vertices.count
+        if byteCount <= 4096 {
+            vertices.withUnsafeBytes { raw in
+                encoder.setVertexBytes(raw.baseAddress!, length: raw.count, index: 0)
+            }
+        } else {
+            guard let buffer = device.makeBuffer(length: max(byteCount, 1), options: .storageModeShared) else {
+                return
+            }
+            vertices.withUnsafeBytes { raw in
+                buffer.contents().copyMemory(from: raw.baseAddress!, byteCount: raw.count)
+            }
+            encoder.setVertexBuffer(buffer, offset: 0, index: 0)
         }
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertices.count)
     }
@@ -418,8 +430,20 @@ final class Renderer: NSObject, MTKViewDelegate {
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentTexture(texture, index: 0)
         encoder.setFragmentSamplerState(sampler, index: 0)
-        vertices.withUnsafeBytes { raw in
-            encoder.setVertexBytes(raw.baseAddress!, length: raw.count, index: 0)
+
+        let byteCount = MemoryLayout<RingVertex>.stride * vertices.count
+        if byteCount <= 4096 {
+            vertices.withUnsafeBytes { raw in
+                encoder.setVertexBytes(raw.baseAddress!, length: raw.count, index: 0)
+            }
+        } else {
+            guard let buffer = device.makeBuffer(length: max(byteCount, 1), options: .storageModeShared) else {
+                return
+            }
+            vertices.withUnsafeBytes { raw in
+                buffer.contents().copyMemory(from: raw.baseAddress!, byteCount: raw.count)
+            }
+            encoder.setVertexBuffer(buffer, offset: 0, index: 0)
         }
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertices.count)
     }
