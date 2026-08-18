@@ -275,6 +275,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
 
         encoder.endEncoding()
+
         commandBuffer.present(drawable)
         commandBuffer.commit()
     }

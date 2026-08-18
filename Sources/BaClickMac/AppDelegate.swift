@@ -70,7 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mouseMonitor = monitor
 
         self.window = window
-        NSApp.activate(ignoringOtherApps: true)
+
+        // NOTE: do NOT call NSApp.activate(...) here. If our app becomes
+        // frontmost, AppKit's global mouse monitor stops receiving clicks from
+        // our own app and the effect appears dead until the user focuses
+        // another application.
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
