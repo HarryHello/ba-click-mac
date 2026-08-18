@@ -8,25 +8,23 @@ enum ShaderSource {
     using namespace metal;
 
     struct TexturedVertex {
-        float2 position;
-        float2 uv;
-        packed_float3 color;
-        float particleAlpha;
-        float coverageFactor;
+        float4 a; // position.xy
+        float4 b; // uv.xy
+        float4 c; // color.rgb + particleAlpha
+        float4 d; // coverageFactor
     };
 
     struct RingVertex {
-        float2 position;
-        float2 uv;
-        packed_float3 color;
-        float dissolveThreshold;
-        float coverageOpacity;
+        float4 a; // position.xy
+        float4 b; // uv.xy
+        float4 c; // color.rgb + dissolveThreshold
+        float4 d; // coverageOpacity
     };
 
     struct TexturedVertexOut {
         float4 position [[position]];
         float2 uv;
-        packed_float3 color;
+        float3 color;
         float particleAlpha;
         float coverageFactor;
     };
@@ -34,7 +32,7 @@ enum ShaderSource {
     struct RingVertexOut {
         float4 position [[position]];
         float2 uv;
-        packed_float3 color;
+        float3 color;
         float dissolveThreshold;
         float coverageOpacity;
     };
@@ -54,12 +52,12 @@ enum ShaderSource {
     ) {
         TexturedVertex v = vertices[vid];
         TexturedVertexOut out;
-        float2 ndc = v.position / viewportSize * 2.0 - 1.0;
+        float2 ndc = v.a.xy / viewportSize * 2.0 - 1.0;
         out.position = float4(ndc, 0.0, 1.0);
-        out.uv = v.uv;
-        out.color = v.color;
-        out.particleAlpha = v.particleAlpha;
-        out.coverageFactor = v.coverageFactor;
+        out.uv = v.b.xy;
+        out.color = v.c.rgb;
+        out.particleAlpha = v.c.w;
+        out.coverageFactor = v.d.x;
         return out;
     }
 
@@ -70,12 +68,12 @@ enum ShaderSource {
     ) {
         RingVertex v = vertices[vid];
         RingVertexOut out;
-        float2 ndc = v.position / viewportSize * 2.0 - 1.0;
+        float2 ndc = v.a.xy / viewportSize * 2.0 - 1.0;
         out.position = float4(ndc, 0.0, 1.0);
-        out.uv = v.uv;
-        out.color = v.color;
-        out.dissolveThreshold = v.dissolveThreshold;
-        out.coverageOpacity = v.coverageOpacity;
+        out.uv = v.b.xy;
+        out.color = v.c.rgb;
+        out.dissolveThreshold = v.c.w;
+        out.coverageOpacity = v.d.x;
         return out;
     }
 
