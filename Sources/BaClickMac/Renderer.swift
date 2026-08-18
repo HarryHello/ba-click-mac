@@ -51,6 +51,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let trianglePipeline: MTLRenderPipelineState
     private let compositePipeline: MTLRenderPipelineState
     private let bloomAddPipeline: MTLRenderPipelineState
+    private let bloomEnabled: Bool
 
     private let circleTexture: MTLTexture
     private let ringTexture: MTLTexture
@@ -83,6 +84,8 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         self.device = device
         self.commandQueue = commandQueue
+        self.bloomEnabled = getenv("BA_NO_BLOOM") == nil
+        dlog("[renderer] bloomEnabled=\(self.bloomEnabled)")
 
         let samplerDescriptor = MTLSamplerDescriptor()
         samplerDescriptor.minFilter = .linear
@@ -201,7 +204,8 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         // 1) Render the glow-eligible parts (disk/ring/trail, no triangles) to
         //    an offscreen HDR scene and blur it into the bloom texture.
-        if let scene = sceneTexture,
+        if bloomEnabled,
+           let scene = sceneTexture,
            let bloom = bloomTexture,
            let blur = blurFilter {
             let scenePass = MTLRenderPassDescriptor()
@@ -245,7 +249,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder: encoder
         )
 
-        if let bloom = bloomTexture {
+        if bloomEnabled, let bloom = bloomTexture {
             encoder.setRenderPipelineState(bloomAddPipeline)
             encoder.setFragmentTexture(bloom, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
