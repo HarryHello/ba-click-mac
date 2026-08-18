@@ -112,19 +112,19 @@ final class Renderer: NSObject, MTKViewDelegate {
                 device: device,
                 vertexFunction: texturedVertex,
                 fragmentFunction: diskFragment,
-                pixelFormat: .rgba16Float
+                pixelFormat: .rgba32Float
             )
             self.sceneRingPipeline = try Renderer.makePipeline(
                 device: device,
                 vertexFunction: ringVertex,
                 fragmentFunction: ringFragment,
-                pixelFormat: .rgba16Float
+                pixelFormat: .rgba32Float
             )
             self.sceneTrailPipeline = try Renderer.makePipeline(
                 device: device,
                 vertexFunction: texturedVertex,
                 fragmentFunction: trailFragment,
-                pixelFormat: .rgba16Float
+                pixelFormat: .rgba32Float
             )
             // Fallback (no bloom targets) pipelines target the window directly.
             self.diskPipeline = try Renderer.makePipeline(
@@ -249,7 +249,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder.setRenderPipelineState(bloomAddPipeline)
             encoder.setFragmentTexture(bloom, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
-            var strength: Float = 1.6
+            var strength: Float = 2.0
             encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
@@ -589,7 +589,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         sceneSize = pixelSize
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba16Float,
+            pixelFormat: .rgba32Float,
             width: Int(pixelSize.width),
             height: Int(pixelSize.height),
             mipmapped: false
