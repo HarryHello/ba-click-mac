@@ -1,6 +1,7 @@
 import AppKit
 import Metal
 import MetalKit
+import MetalPerformanceShaders
 import QuartzCore
 import simd
 
@@ -31,11 +32,17 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let ringPipeline: MTLRenderPipelineState
     private let trianglePipeline: MTLRenderPipelineState
     private let trailPipeline: MTLRenderPipelineState
+    private let compositePipeline: MTLRenderPipelineState
 
     private let circleTexture: MTLTexture
     private let ringTexture: MTLTexture
     private let triangleTexture: MTLTexture
     private let trailTexture: MTLTexture
+
+    private var sceneTexture: MTLTexture?
+    private var bloomTexture: MTLTexture?
+    private var blurFilter: MPSImageGaussianBlur?
+    private var sceneSize: CGSize = .zero
 
     private var viewportSize = SIMD2<Float>(1, 1)
     private var scale: Float = 1
@@ -49,7 +56,9 @@ final class Renderer: NSObject, MTKViewDelegate {
               let diskFragment = library.makeFunction(name: "disk_fragment"),
               let ringFragment = library.makeFunction(name: "ring_fragment"),
               let triangleFragment = library.makeFunction(name: "triangle_fragment"),
-              let trailFragment = library.makeFunction(name: "trail_fragment") else {
+              let trailFragment = library.makeFunction(name: "trail_fragment"),
+              let fullscreenVertex = library.makeFunction(name: "fullscreen_vertex"),
+              let compositeFragment = library.makeFunction(name: "composite_fragment") else {
             return nil
         }
 
@@ -103,6 +112,12 @@ final class Renderer: NSObject, MTKViewDelegate {
                 vertexFunction: texturedVertex,
                 fragmentFunction: trailFragment
             )
+            self.compositePipeline = try Renderer.makePipeline(
+                device: device,
+                view: view,
+                vertexFunction: fullscreenVertex,
+                fragmentFunction: compositeFragment
+            )
         } catch {
             return nil
         }
@@ -124,16 +139,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         let now = CACurrentMediaTime()
         particleSystem.update(now: now)
 
-        guard let renderPassDescriptor = view.currentRenderPassDescriptor,
-              let drawable = view.currentDrawable,
-              let commandBuffer = commandQueue.makeCommandBuffer(),
-              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+        guard let drawable = view.currentDrawable,
+              let commandBuffer = commandQueue.makeCommandBuffer() else {
             return
         }
-
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-        renderPassDescriptor.colorAttachments[0].loadAction = .clear
-        renderPassDescriptor.colorAttachments[0].storeAction = .store
 
         var diskVertices: [TexturedVertex] = []
         var ringVertices: [RingVertex] = []
@@ -145,22 +154,89 @@ final class Renderer: NSObject, MTKViewDelegate {
         appendShards(to: &triangleVertices)
         appendTrail(to: &trailVertices)
 
+        // If bloom targets are available, render the effect to an offscreen
+        // scene, blur it, then composite scene + bloom onto the transparent
+        // overlay. Otherwise draw directly (no glow).
+        if let scene = sceneTexture, let bloom = bloomTexture, let blur = blurFilter {
+            let scenePass = MTLRenderPassDescriptor()
+            scenePass.colorAttachments[0].texture = scene
+            scenePass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            scenePass.colorAttachments[0].loadAction = .clear
+            scenePass.colorAttachments[0].storeAction = .store
+            if let sceneEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: scenePass) {
+                drawParticles(
+                    disk: diskVertices,
+                    ring: ringVertices,
+                    triangle: triangleVertices,
+                    trail: trailVertices,
+                    encoder: sceneEncoder
+                )
+                sceneEncoder.endEncoding()
+            }
+
+            blur.encode(commandBuffer: commandBuffer, sourceTexture: scene, destinationTexture: bloom)
+
+            guard let renderPassDescriptor = view.currentRenderPassDescriptor,
+                  let compositeEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+                return
+            }
+            renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            renderPassDescriptor.colorAttachments[0].loadAction = .clear
+            renderPassDescriptor.colorAttachments[0].storeAction = .store
+
+            compositeEncoder.setRenderPipelineState(compositePipeline)
+            compositeEncoder.setFragmentTexture(scene, index: 0)
+            compositeEncoder.setFragmentTexture(bloom, index: 1)
+            compositeEncoder.setFragmentSamplerState(sampler, index: 0)
+            var bloomStrength: Float = 0.6
+            compositeEncoder.setFragmentBytes(&bloomStrength, length: MemoryLayout<Float>.size, index: 0)
+            compositeEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            compositeEncoder.endEncoding()
+
+            commandBuffer.present(drawable)
+            commandBuffer.commit()
+            return
+        }
+
+        // Fallback: no bloom targets, render particles straight to the window.
+        guard let renderPassDescriptor = view.currentRenderPassDescriptor,
+              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            return
+        }
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        renderPassDescriptor.colorAttachments[0].loadAction = .clear
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+        drawParticles(
+            disk: diskVertices,
+            ring: ringVertices,
+            triangle: triangleVertices,
+            trail: trailVertices,
+            encoder: encoder
+        )
+        encoder.endEncoding()
+        commandBuffer.present(drawable)
+        commandBuffer.commit()
+    }
+
+    private func drawParticles(
+        disk: [TexturedVertex],
+        ring: [RingVertex],
+        triangle: [TexturedVertex],
+        trail: [TexturedVertex],
+        encoder: MTLRenderCommandEncoder
+    ) {
         encoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
 
         var diskEmission = BAEffect.disk.emission
         encoder.setFragmentBytes(&diskEmission, length: MemoryLayout<Float>.size, index: 2)
-        drawTextured(vertices: diskVertices, texture: circleTexture, pipeline: diskPipeline, encoder: encoder)
+        drawTextured(vertices: disk, texture: circleTexture, pipeline: diskPipeline, encoder: encoder)
 
         var ringEmission = BAEffect.rings.hdrIntensity
         encoder.setFragmentBytes(&ringEmission, length: MemoryLayout<Float>.size, index: 2)
-        drawRing(vertices: ringVertices, texture: ringTexture, pipeline: ringPipeline, encoder: encoder)
+        drawRing(vertices: ring, texture: ringTexture, pipeline: ringPipeline, encoder: encoder)
 
-        drawTextured(vertices: triangleVertices, texture: triangleTexture, pipeline: trianglePipeline, encoder: encoder)
-        drawTextured(vertices: trailVertices, texture: trailTexture, pipeline: trailPipeline, encoder: encoder)
-
-        encoder.endEncoding()
-        commandBuffer.present(drawable)
-        commandBuffer.commit()
+        drawTextured(vertices: triangle, texture: triangleTexture, pipeline: trianglePipeline, encoder: encoder)
+        drawTextured(vertices: trail, texture: trailTexture, pipeline: trailPipeline, encoder: encoder)
     }
 
     // MARK: - Geometry building
@@ -453,6 +529,29 @@ final class Renderer: NSObject, MTKViewDelegate {
         viewportSize = SIMD2(Float(max(bounds.width, 1)), Float(max(bounds.height, 1)))
         scale = Float(max(bounds.height, 1) / 1080.0)
         particleSystem.setViewportHeight(bounds.height)
+
+        var pixelSize = view.drawableSize
+        if pixelSize.width <= 0 || pixelSize.height <= 0 {
+            let backing = view.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+            pixelSize = CGSize(width: bounds.width * backing, height: bounds.height * backing)
+        }
+        guard pixelSize.width > 0, pixelSize.height > 0 else { return }
+
+        if sceneTexture != nil && bloomTexture != nil && sceneSize.width == pixelSize.width && sceneSize.height == pixelSize.height {
+            return
+        }
+
+        sceneSize = pixelSize
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba16Float,
+            width: Int(pixelSize.width),
+            height: Int(pixelSize.height),
+            mipmapped: false
+        )
+        descriptor.usage = [.renderTarget, .shaderRead]
+        sceneTexture = device.makeTexture(descriptor: descriptor)
+        bloomTexture = device.makeTexture(descriptor: descriptor)
+        blurFilter = MPSImageGaussianBlur(device: device, sigma: 4)
     }
 
     // MARK: - Helpers

@@ -101,7 +101,8 @@ enum BAEffect {
 
     enum disk {
         static let lifetimeMs: Float = 200
-        static let radius: Float = 0.12 * 2 * 0.5 * worldToReferencePixels
+        // Enlarged vs. the raw Unity value (64.8px @1080p) per visual tuning.
+        static let radius: Float = 0.12 * 2 * 0.5 * worldToReferencePixels * 1.45
         static let colorKeys: [[Float]] = [
             [0, 255, 255, 255],
             [0.1205921, 61.344, 99.607, 255]
@@ -122,8 +123,9 @@ enum BAEffect {
     enum rings {
         static let count = 2
         static let lifetimeMs: Float = 600
-        static let radiusMin: Float = 0.12 * worldToReferencePixels * ringMeshOuterRadius
-        static let radiusMax: Float = 0.14 * worldToReferencePixels * ringMeshOuterRadius
+        // Shrunk vs. the raw Unity values so the ring does not dwarf the disk.
+        static let radiusMin: Float = 0.12 * worldToReferencePixels * ringMeshOuterRadius * 0.78
+        static let radiusMax: Float = 0.14 * worldToReferencePixels * ringMeshOuterRadius * 0.78
         static let angularVelocityMinKeys: [[Float]] = [
             [0.14903903, 1],
             [1, 0.45561826]

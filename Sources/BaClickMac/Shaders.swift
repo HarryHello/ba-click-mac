@@ -139,5 +139,39 @@ enum ShaderSource {
         float3 srgb = float3(linearToSrgb(emission.r), linearToSrgb(emission.g), linearToSrgb(emission.b));
         return float4(srgb * coverage, coverage);
     }
+
+    struct FullscreenOut {
+        float4 position [[position]];
+        float2 uv;
+    };
+
+    vertex FullscreenOut fullscreen_vertex(uint vid [[vertex_id]]) {
+        float2 positions[3] = {
+            float2(-1.0, -1.0),
+            float2(3.0, -1.0),
+            float2(-1.0, 3.0)
+        };
+        FullscreenOut out;
+        out.position = float4(positions[vid], 0.0, 1.0);
+        out.uv = positions[vid] * 0.5 + 0.5;
+        return out;
+    }
+
+    // Composite pass: scene + blurred bloom, additive-ish glow on a
+    // transparent overlay.
+    fragment float4 composite_fragment(
+        FullscreenOut in [[stage_in]],
+        texture2d<float> scene [[texture(0)]],
+        texture2d<float> bloom [[texture(1)]],
+        sampler samp [[sampler(0)]],
+        constant float &bloomStrength [[buffer(0)]]
+    ) {
+        float4 s = scene.sample(samp, in.uv);
+        float4 b = bloom.sample(samp, in.uv);
+        float3 color = clamp(s.rgb + b.rgb * max(bloomStrength, 0.0), 0.0, 1.0);
+        float maxColor = max(max(color.r, color.g), color.b);
+        float alpha = clamp(max(s.a, maxColor), 0.0, 1.0);
+        return float4(color * alpha, alpha);
+    }
     """
 }
