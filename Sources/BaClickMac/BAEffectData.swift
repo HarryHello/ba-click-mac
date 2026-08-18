@@ -124,8 +124,8 @@ enum BAEffect {
         static let count = 2
         static let lifetimeMs: Float = 600
         // Shrunk vs. the raw Unity values so the ring does not dwarf the disk.
-        static let radiusMin: Float = 0.12 * worldToReferencePixels * ringMeshOuterRadius * 0.78
-        static let radiusMax: Float = 0.14 * worldToReferencePixels * ringMeshOuterRadius * 0.78
+        static let radiusMin: Float = 0.12 * worldToReferencePixels * ringMeshOuterRadius * 0.62
+        static let radiusMax: Float = 0.14 * worldToReferencePixels * ringMeshOuterRadius * 0.62
         static let angularVelocityMinKeys: [[Float]] = [
             [0.14903903, 1],
             [1, 0.45561826]

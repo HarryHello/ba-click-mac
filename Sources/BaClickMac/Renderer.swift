@@ -202,7 +202,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         encoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
 
         // Soft artificial halo pass (direct rendering, no offscreen target).
-        var glowEmission: Float = 0.35
+        var glowEmission: Float = 0.9
         encoder.setFragmentBytes(&glowEmission, length: MemoryLayout<Float>.size, index: 2)
         drawTextured(vertices: glowVertices, texture: circleTexture, pipeline: diskPipeline, encoder: encoder)
 
@@ -271,12 +271,12 @@ final class Renderer: NSObject, MTKViewDelegate {
             )
             appendTexturedSprite(
                 center: burst.position,
-                size: size * 2.6,
+                size: size * 3.0,
                 angle: burst.diskRotation,
                 uvMin: SIMD2(0, 0),
                 uvMax: SIMD2(1, 1),
                 color: material,
-                particleAlpha: alpha * 0.18,
+                particleAlpha: alpha * 0.30,
                 coverageFactor: 1,
                 to: &glow
             )
@@ -312,12 +312,12 @@ final class Renderer: NSObject, MTKViewDelegate {
                 // Soft halo behind the ring.
                 appendTexturedSprite(
                     center: burst.position,
-                    size: outerRadius * 1.6,
+                    size: outerRadius * 1.9,
                     angle: 0,
                     uvMin: SIMD2(0, 0),
                     uvMax: SIMD2(1, 1),
                     color: material,
-                    particleAlpha: 0.10,
+                    particleAlpha: 0.22,
                     coverageFactor: 1,
                     to: &glow
                 )
@@ -409,20 +409,18 @@ final class Renderer: NSObject, MTKViewDelegate {
 
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
 
-            let midProgress = (fromProgress + toProgress) * 0.5
             let midColor = (fromColor + toColor) * 0.5
             appendTexturedSprite(
                 center: (from.position + to.position) * 0.5,
-                size: halfWidth * 5,
+                size: halfWidth * 8,
                 angle: 0,
                 uvMin: SIMD2(0, 0),
                 uvMax: SIMD2(1, 1),
                 color: midColor,
-                particleAlpha: 0.10,
+                particleAlpha: 0.25,
                 coverageFactor: 1,
                 to: &glow
             )
-            _ = midProgress
         }
     }
 
