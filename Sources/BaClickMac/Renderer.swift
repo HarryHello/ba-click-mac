@@ -86,9 +86,8 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         self.device = device
         self.commandQueue = commandQueue
-        // Bloom overlay pass is still under investigation (it can blank the
-        // window), so it is opt-in via BA_ENABLE_BLOOM=1 and off by default.
-        self.bloomEnabled = getenv("BA_ENABLE_BLOOM") != nil
+        // Bloom now works, default ON; disable with BA_DISABLE_BLOOM=1.
+        self.bloomEnabled = getenv("BA_DISABLE_BLOOM") == nil
         self.settings = FXSettings.load()
         particleSystem.ringScale = settings.ringScale
         particleSystem.shardScale = settings.shardScale

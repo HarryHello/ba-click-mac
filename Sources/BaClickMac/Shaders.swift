@@ -164,8 +164,11 @@ enum ShaderSource {
         sampler samp [[sampler(0)]],
         constant float &bloomStrength [[buffer(0)]]
     ) {
-        float4 s = scene.sample(samp, in.uv);
-        float4 b = bloom.sample(samp, in.uv);
+        // The offscreen scene/bloom row order is top-left, while the fullscreen
+        // triangle's v=0 is at the bottom; flip V so sampling isn't mirrored.
+        float2 uv = float2(in.uv.x, 1.0 - in.uv.y);
+        float4 s = scene.sample(samp, uv);
+        float4 b = bloom.sample(samp, uv);
         float3 color = clamp(s.rgb + b.rgb * max(bloomStrength, 0.0), 0.0, 1.0);
         float maxColor = max(max(color.r, color.g), color.b);
         float alpha = clamp(max(s.a, maxColor), 0.0, 1.0);
@@ -180,7 +183,8 @@ enum ShaderSource {
         sampler samp [[sampler(0)]],
         constant float &strength [[buffer(0)]]
     ) {
-        float4 b = bloom.sample(samp, in.uv);
+        float2 uv = float2(in.uv.x, 1.0 - in.uv.y);
+        float4 b = bloom.sample(samp, uv);
         float3 c = clamp(b.rgb * max(strength, 0.0), 0.0, 1.0);
         float a = min(1.0, max(max(c.r, c.g), c.b));
         return float4(c * a, a);
