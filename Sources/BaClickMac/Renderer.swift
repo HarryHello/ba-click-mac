@@ -84,7 +84,9 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         self.device = device
         self.commandQueue = commandQueue
-        self.bloomEnabled = getenv("BA_NO_BLOOM") == nil
+        // Bloom overlay pass is still under investigation (it can blank the
+        // window), so it is opt-in via BA_ENABLE_BLOOM=1 and off by default.
+        self.bloomEnabled = getenv("BA_ENABLE_BLOOM") != nil
         dlog("[renderer] bloomEnabled=\(self.bloomEnabled)")
 
         let samplerDescriptor = MTLSamplerDescriptor()
