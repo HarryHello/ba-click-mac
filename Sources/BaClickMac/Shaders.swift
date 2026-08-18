@@ -10,7 +10,7 @@ enum ShaderSource {
     struct TexturedVertex {
         float2 position;
         float2 uv;
-        float3 color;
+        packed_float3 color;
         float particleAlpha;
         float coverageFactor;
     };
@@ -18,7 +18,7 @@ enum ShaderSource {
     struct RingVertex {
         float2 position;
         float2 uv;
-        float3 color;
+        packed_float3 color;
         float dissolveThreshold;
         float coverageOpacity;
     };
@@ -26,7 +26,7 @@ enum ShaderSource {
     struct TexturedVertexOut {
         float4 position [[position]];
         float2 uv;
-        float3 color;
+        packed_float3 color;
         float particleAlpha;
         float coverageFactor;
     };
@@ -34,7 +34,7 @@ enum ShaderSource {
     struct RingVertexOut {
         float4 position [[position]];
         float2 uv;
-        float3 color;
+        packed_float3 color;
         float dissolveThreshold;
         float coverageOpacity;
     };

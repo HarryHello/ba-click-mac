@@ -5,10 +5,23 @@ import MetalPerformanceShaders
 import QuartzCore
 import simd
 
+/// 3 floats with 4-byte alignment, matching MSL `packed_float3`.
+struct PackedFloat3 {
+    var x: Float
+    var y: Float
+    var z: Float
+
+    init(_ vector: SIMD3<Float>) {
+        self.x = vector.x
+        self.y = vector.y
+        self.z = vector.z
+    }
+}
+
 struct TexturedVertex {
     var position: SIMD2<Float>
     var uv: SIMD2<Float>
-    var color: SIMD3<Float>
+    var color: PackedFloat3
     var particleAlpha: Float
     var coverageFactor: Float
 }
@@ -16,7 +29,7 @@ struct TexturedVertex {
 struct RingVertex {
     var position: SIMD2<Float>
     var uv: SIMD2<Float>
-    var color: SIMD3<Float>
+    var color: PackedFloat3
     var dissolveThreshold: Float
     var coverageOpacity: Float
 }
@@ -164,10 +177,12 @@ final class Renderer: NSObject, MTKViewDelegate {
             scenePass.colorAttachments[0].loadAction = .clear
             scenePass.colorAttachments[0].storeAction = .store
             if let sceneEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: scenePass) {
+                // Triangle shards are NOT bloomed in the original effect, so
+                // they are excluded from the scene/blur and drawn on top later.
                 drawParticles(
                     disk: diskVertices,
                     ring: ringVertices,
-                    triangle: triangleVertices,
+                    triangle: [],
                     trail: trailVertices,
                     encoder: sceneEncoder
                 )
@@ -191,6 +206,13 @@ final class Renderer: NSObject, MTKViewDelegate {
             var bloomStrength: Float = 0.6
             compositeEncoder.setFragmentBytes(&bloomStrength, length: MemoryLayout<Float>.size, index: 0)
             compositeEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+
+            // Draw un-bloomed triangle shards directly on top.
+            if !triangleVertices.isEmpty {
+                compositeEncoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
+                drawTextured(vertices: triangleVertices, texture: triangleTexture, pipeline: trianglePipeline, encoder: compositeEncoder)
+            }
+
             compositeEncoder.endEncoding()
 
             commandBuffer.present(drawable)
@@ -373,10 +395,10 @@ final class Renderer: NSObject, MTKViewDelegate {
             let uFrom = 1 - fromProgress
             let uTo = 1 - toProgress
 
-            let v0 = TexturedVertex(position: fromLeft, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: fromCoverage)
-            let v1 = TexturedVertex(position: toLeft, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: toCoverage)
-            let v2 = TexturedVertex(position: toRight, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: toCoverage)
-            let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: fromCoverage)
+            let v0 = TexturedVertex(position: fromLeft, uv: SIMD2(uFrom, 1), color: PackedFloat3(fromColor), particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: fromCoverage)
+            let v1 = TexturedVertex(position: toLeft, uv: SIMD2(uTo, 1), color: PackedFloat3(toColor), particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: toCoverage)
+            let v2 = TexturedVertex(position: toRight, uv: SIMD2(uTo, 0), color: PackedFloat3(toColor), particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: toCoverage)
+            let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: PackedFloat3(fromColor), particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: fromCoverage)
 
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
         }
@@ -411,7 +433,7 @@ final class Renderer: NSObject, MTKViewDelegate {
                 corner.x * c - corner.y * s,
                 corner.x * s + corner.y * c
             )
-            tri.append(TexturedVertex(position: center + rotated, uv: uv, color: color, particleAlpha: particleAlpha, coverageFactor: coverageFactor))
+            tri.append(TexturedVertex(position: center + rotated, uv: uv, color: PackedFloat3(color), particleAlpha: particleAlpha, coverageFactor: coverageFactor))
         }
         vertices.append(contentsOf: [tri[0], tri[1], tri[2], tri[0], tri[2], tri[3]])
     }
@@ -458,10 +480,10 @@ final class Renderer: NSObject, MTKViewDelegate {
                 let u0 = uvMin + uvSpan * (direction > 0 ? progress0 : 1 - progress0)
                 let u1 = uvMin + uvSpan * (direction > 0 ? progress1 : 1 - progress1)
 
-                let v00 = RingVertex(position: innerStart, uv: SIMD2(u0, innerV), color: color, dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
-                let v01 = RingVertex(position: innerEnd, uv: SIMD2(u1, innerV), color: color, dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
-                let v11 = RingVertex(position: outerEnd, uv: SIMD2(u1, outerV), color: color, dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
-                let v10 = RingVertex(position: outerStart, uv: SIMD2(u0, outerV), color: color, dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
+                let v00 = RingVertex(position: innerStart, uv: SIMD2(u0, innerV), color: PackedFloat3(color), dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
+                let v01 = RingVertex(position: innerEnd, uv: SIMD2(u1, innerV), color: PackedFloat3(color), dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
+                let v11 = RingVertex(position: outerEnd, uv: SIMD2(u1, outerV), color: PackedFloat3(color), dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
+                let v10 = RingVertex(position: outerStart, uv: SIMD2(u0, outerV), color: PackedFloat3(color), dissolveThreshold: dissolveThreshold, coverageOpacity: coverageOpacity)
 
                 vertices.append(contentsOf: [v00, v01, v11, v00, v11, v10])
             }
