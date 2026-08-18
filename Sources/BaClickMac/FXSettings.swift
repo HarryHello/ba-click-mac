@@ -13,6 +13,8 @@ struct FXSettings: Codable {
     var clickBloomSigma: Float = 14.0
     var trailBloomStrength: Float = 1.0
     var trailBloomSigma: Float = 6.0
+    // >1 makes the glow peak brighter and fall off faster around the edges.
+    var bloomFalloff: Float = 2.0
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()

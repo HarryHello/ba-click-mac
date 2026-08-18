@@ -181,11 +181,15 @@ enum ShaderSource {
         FullscreenOut in [[stage_in]],
         texture2d<float> bloom [[texture(0)]],
         sampler samp [[sampler(0)]],
-        constant float &strength [[buffer(0)]]
+        constant float &strength [[buffer(0)]],
+        constant float &falloff [[buffer(1)]]
     ) {
         float2 uv = float2(in.uv.x, 1.0 - in.uv.y);
         float4 b = bloom.sample(samp, uv);
         float3 c = clamp(b.rgb * max(strength, 0.0), 0.0, 1.0);
+        // Higher falloff keeps the center bright while making the edges fade
+        // out faster (peaked glow).
+        c = pow(c, max(falloff, 0.1));
         float a = min(1.0, max(max(c.r, c.g), c.b));
         return float4(c * a, a);
     }

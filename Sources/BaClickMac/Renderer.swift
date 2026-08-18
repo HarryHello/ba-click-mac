@@ -307,14 +307,18 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder.setFragmentTexture(clickBloom, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
             var strength = settings.clickBloomStrength
+            var falloff = settings.bloomFalloff
             encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
+            encoder.setFragmentBytes(&falloff, length: MemoryLayout<Float>.size, index: 1)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
 
             encoder.setRenderPipelineState(bloomAddPipeline)
             encoder.setFragmentTexture(trailBloom, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
             strength = settings.trailBloomStrength
+            falloff = settings.bloomFalloff
             encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
+            encoder.setFragmentBytes(&falloff, length: MemoryLayout<Float>.size, index: 1)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
 
