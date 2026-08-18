@@ -126,19 +126,19 @@ final class Renderer: NSObject, MTKViewDelegate {
                 device: device,
                 vertexFunction: texturedVertex,
                 fragmentFunction: diskFragment,
-                pixelFormat: .rgba32Float
+                pixelFormat: .rgba16Float
             )
             self.sceneRingPipeline = try Renderer.makePipeline(
                 device: device,
                 vertexFunction: ringVertex,
                 fragmentFunction: ringFragment,
-                pixelFormat: .rgba32Float
+                pixelFormat: .rgba16Float
             )
             self.sceneTrailPipeline = try Renderer.makePipeline(
                 device: device,
                 vertexFunction: texturedVertex,
                 fragmentFunction: trailFragment,
-                pixelFormat: .rgba32Float
+                pixelFormat: .rgba16Float
             )
             // Fallback (no bloom targets) pipelines target the window directly.
             self.diskPipeline = try Renderer.makePipeline(
@@ -657,17 +657,21 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         guard pixelSize.width > 0, pixelSize.height > 0 else { return }
 
+        // Bloom is soft, so render it at half resolution to cut memory/GPU cost.
+        let bloomWidth = max(1, Int(pixelSize.width * 0.5))
+        let bloomHeight = max(1, Int(pixelSize.height * 0.5))
+
         if clickSceneTexture != nil && clickBloomTexture != nil &&
             trailSceneTexture != nil && trailBloomTexture != nil &&
-            sceneSize.width == pixelSize.width && sceneSize.height == pixelSize.height {
+            sceneSize.width == CGFloat(bloomWidth) && sceneSize.height == CGFloat(bloomHeight) {
             return
         }
 
-        sceneSize = pixelSize
+        sceneSize = CGSize(width: bloomWidth, height: bloomHeight)
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba32Float,
-            width: Int(pixelSize.width),
-            height: Int(pixelSize.height),
+            pixelFormat: .rgba16Float,
+            width: bloomWidth,
+            height: bloomHeight,
             mipmapped: false
         )
         descriptor.usage = [.renderTarget, .shaderRead, .shaderWrite]
