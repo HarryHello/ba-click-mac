@@ -5,6 +5,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var mouseMonitor: MouseMonitor?
     private var renderer: Renderer?
+    private var statusLabel: NSTextField?
+    private var statusTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
@@ -65,6 +67,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlayView?.layer?.backgroundColor = NSColor.clear.cgColor
         }
 
+        // TEMP debug HUD: show bloom/settings/particle state on the overlay.
+        let label = NSTextField(labelWithString: "ba-click status")
+        label.frame = NSRect(x: 20, y: frame.height - 50, width: 800, height: 26)
+        label.isBezeled = false
+        label.drawsBackground = false
+        label.textColor = .white
+        label.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+        overlayView.addSubview(label)
+        self.statusLabel = label
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.updateStatus()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.statusTimer = timer
+        updateStatus()
+
         // Capture global mouse events. The overlay itself ignores mouse events,
         // so we observe them system-wide and feed the effect manually.
         let monitor = MouseMonitor(screenFrame: frame)
@@ -87,6 +105,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    private func updateStatus() {
+        guard let renderer, let label = statusLabel else { return }
+        let s = renderer.settings
+        label.stringValue = String(
+            format: "bloom=%@ strength=%.2f sigma=%.1f bursts=%d shards=%d trail=%d",
+            renderer.bloomEnabled ? "ON" : "OFF",
+            s.bloomStrength,
+            s.bloomSigma,
+            renderer.particleSystem.bursts.count,
+            renderer.particleSystem.shards.count,
+            renderer.particleSystem.trail.count
+        )
     }
 
     private func buildMenu() {

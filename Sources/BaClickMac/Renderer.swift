@@ -51,7 +51,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let trianglePipeline: MTLRenderPipelineState
     private let compositePipeline: MTLRenderPipelineState
     private let bloomAddPipeline: MTLRenderPipelineState
-    private let bloomEnabled: Bool
+    let bloomEnabled: Bool
 
     private let circleTexture: MTLTexture
     private let ringTexture: MTLTexture
@@ -62,7 +62,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var bloomTexture: MTLTexture?
     private var blurFilter: MPSImageGaussianBlur?
     private var sceneSize: CGSize = .zero
-    private var settings: FXSettings
+    private(set) var settings: FXSettings
     private var lastSettingsReload: TimeInterval = 0
     private var currentBloomSigma: Float = 0
 
