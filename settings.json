@@ -1,6 +1,6 @@
 {
-  "diskScale": 1.45,
-  "ringScale": 0.9,
+  "diskScale": 1.5,
+  "ringScale": 0.85,
   "shardScale": 1.0,
   "trailScale": 1.0,
   "bloomStrength": 2.0

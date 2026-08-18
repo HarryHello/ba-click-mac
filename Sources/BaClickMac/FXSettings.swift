@@ -3,8 +3,8 @@ import Foundation
 /// Runtime tuning parameters. Edit `settings.json` next to the executable
 /// (or in the working directory) and save — the app reloads it every 0.5s.
 struct FXSettings: Codable {
-    var diskScale: Float = 1.45
-    var ringScale: Float = 0.9
+    var diskScale: Float = 1.5
+    var ringScale: Float = 0.85
     var shardScale: Float = 1.0
     var trailScale: Float = 1.0
     var bloomStrength: Float = 2.0
