@@ -219,8 +219,8 @@ enum BAEffect {
             [1, 0, 99.6, 255]
         ]
         static let coverageLongitudinalKeys: [[Float]] = [
-            [0, 0],
-            [0.248532, 0],
+            [0, 0.15],
+            [0.248532, 0.15],
             [0.97941558, 1],
             [1, 1]
         ]

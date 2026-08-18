@@ -225,7 +225,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         appendDisks(to: &diskVertices)
         appendRings(to: &ringVertices)
         appendShards(to: &triangleVertices)
-        appendTrail(to: &trailVertices, feather: &trailFeatherVertices)
+        appendTrail(to: &trailVertices, feather: &trailFeatherVertices, now: now)
 
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             return
@@ -451,9 +451,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
-    private func appendTrail(to vertices: inout [TexturedVertex], feather: inout [TexturedVertex]) {
+    private func appendTrail(to vertices: inout [TexturedVertex], feather: inout [TexturedVertex], now: Double) {
         let points = particleSystem.trail
         guard points.count >= 2 else { return }
+        let lifetime: Double = 0.3
 
         let totalLength = zip(points, points.dropFirst()).reduce(Float(0)) { acc, pair in
             acc + simd_distance(pair.0.position, pair.1.position)
@@ -492,6 +493,17 @@ final class Renderer: NSObject, MTKViewDelegate {
             let fromCoverage = BAEval.number(BAEffect.trail.coverageLongitudinalKeys, fromProgress)
             let toCoverage = BAEval.number(BAEffect.trail.coverageLongitudinalKeys, toProgress)
 
+            // Age-based fade so the trail and its glow ease out after the
+            // cursor stops instead of popping away at the lifetime boundary.
+            let fromAge = max(0, min(1, (now - from.time) / lifetime))
+            let toAge = max(0, min(1, (now - to.time) / lifetime))
+            let fromFade = Float(1 - fromAge)
+            let toFade = Float(1 - toAge)
+            let fromAlpha = BAEffect.trail.trailOpacity * fromFade
+            let toAlpha = BAEffect.trail.trailOpacity * toFade
+            let fromCov = fromCoverage * fromFade
+            let toCov = toCoverage * toFade
+
             let fromLeft = from.position + offset
             let fromRight = from.position - offset
             let toLeft = to.position + offset
@@ -500,20 +512,20 @@ final class Renderer: NSObject, MTKViewDelegate {
             let uFrom = 1 - fromProgress
             let uTo = 1 - toProgress
 
-            let v0 = TexturedVertex(position: fromLeft, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: fromCoverage)
-            let v1 = TexturedVertex(position: toLeft, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: toCoverage)
-            let v2 = TexturedVertex(position: toRight, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: toCoverage)
-            let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: BAEffect.trail.trailOpacity, coverageFactor: fromCoverage)
+            let v0 = TexturedVertex(position: fromLeft, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: fromAlpha, coverageFactor: fromCov)
+            let v1 = TexturedVertex(position: toLeft, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: toAlpha, coverageFactor: toCov)
+            let v2 = TexturedVertex(position: toRight, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: toAlpha, coverageFactor: toCov)
+            let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: fromAlpha, coverageFactor: fromCov)
 
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
 
             // Feather/outline pass: a wider, low-alpha ribbon using the same
             // trail texture, giving the trail a soft self-luminous edge.
             let featherOffset = normal * (halfWidth * 2.8)
-            let f0 = TexturedVertex(position: from.position + featherOffset, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: 0.20, coverageFactor: fromCoverage)
-            let f1 = TexturedVertex(position: to.position + featherOffset, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: 0.20, coverageFactor: toCoverage)
-            let f2 = TexturedVertex(position: to.position - featherOffset, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: 0.20, coverageFactor: toCoverage)
-            let f3 = TexturedVertex(position: from.position - featherOffset, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: 0.20, coverageFactor: fromCoverage)
+            let f0 = TexturedVertex(position: from.position + featherOffset, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: 0.20 * fromFade, coverageFactor: fromCov)
+            let f1 = TexturedVertex(position: to.position + featherOffset, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: 0.20 * toFade, coverageFactor: toCov)
+            let f2 = TexturedVertex(position: to.position - featherOffset, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: 0.20 * toFade, coverageFactor: toCov)
+            let f3 = TexturedVertex(position: from.position - featherOffset, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: 0.20 * fromFade, coverageFactor: fromCov)
             feather.append(contentsOf: [f0, f1, f2, f0, f2, f3])
         }
     }
