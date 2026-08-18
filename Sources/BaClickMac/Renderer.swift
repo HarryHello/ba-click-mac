@@ -41,10 +41,13 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let commandQueue: MTLCommandQueue
     private let sampler: MTLSamplerState
 
+    private let sceneDiskPipeline: MTLRenderPipelineState
+    private let sceneRingPipeline: MTLRenderPipelineState
+    private let sceneTrailPipeline: MTLRenderPipelineState
     private let diskPipeline: MTLRenderPipelineState
     private let ringPipeline: MTLRenderPipelineState
-    private let trianglePipeline: MTLRenderPipelineState
     private let trailPipeline: MTLRenderPipelineState
+    private let trianglePipeline: MTLRenderPipelineState
     private let compositePipeline: MTLRenderPipelineState
 
     private let circleTexture: MTLTexture
@@ -101,35 +104,56 @@ final class Renderer: NSObject, MTKViewDelegate {
         self.trailTexture = trail
 
         do {
+            // Scene (HDR bloom targets) are rendered with rgba16Float pipelines.
+            self.sceneDiskPipeline = try Renderer.makePipeline(
+                device: device,
+                vertexFunction: texturedVertex,
+                fragmentFunction: diskFragment,
+                pixelFormat: .rgba16Float
+            )
+            self.sceneRingPipeline = try Renderer.makePipeline(
+                device: device,
+                vertexFunction: ringVertex,
+                fragmentFunction: ringFragment,
+                pixelFormat: .rgba16Float
+            )
+            self.sceneTrailPipeline = try Renderer.makePipeline(
+                device: device,
+                vertexFunction: texturedVertex,
+                fragmentFunction: trailFragment,
+                pixelFormat: .rgba16Float
+            )
+            // Fallback (no bloom targets) pipelines target the window directly.
             self.diskPipeline = try Renderer.makePipeline(
                 device: device,
-                view: view,
                 vertexFunction: texturedVertex,
-                fragmentFunction: diskFragment
+                fragmentFunction: diskFragment,
+                pixelFormat: view.colorPixelFormat
             )
             self.ringPipeline = try Renderer.makePipeline(
                 device: device,
-                view: view,
                 vertexFunction: ringVertex,
-                fragmentFunction: ringFragment
-            )
-            self.trianglePipeline = try Renderer.makePipeline(
-                device: device,
-                view: view,
-                vertexFunction: texturedVertex,
-                fragmentFunction: triangleFragment
+                fragmentFunction: ringFragment,
+                pixelFormat: view.colorPixelFormat
             )
             self.trailPipeline = try Renderer.makePipeline(
                 device: device,
-                view: view,
                 vertexFunction: texturedVertex,
-                fragmentFunction: trailFragment
+                fragmentFunction: trailFragment,
+                pixelFormat: view.colorPixelFormat
+            )
+            // Triangle shards and the final composite target the window.
+            self.trianglePipeline = try Renderer.makePipeline(
+                device: device,
+                vertexFunction: texturedVertex,
+                fragmentFunction: triangleFragment,
+                pixelFormat: view.colorPixelFormat
             )
             self.compositePipeline = try Renderer.makePipeline(
                 device: device,
-                view: view,
                 vertexFunction: fullscreenVertex,
-                fragmentFunction: compositeFragment
+                fragmentFunction: compositeFragment,
+                pixelFormat: view.colorPixelFormat
             )
         } catch {
             return nil
@@ -184,7 +208,8 @@ final class Renderer: NSObject, MTKViewDelegate {
                     ring: ringVertices,
                     triangle: [],
                     trail: trailVertices,
-                    encoder: sceneEncoder
+                    encoder: sceneEncoder,
+                    sceneTarget: true
                 )
                 sceneEncoder.endEncoding()
             }
@@ -245,8 +270,13 @@ final class Renderer: NSObject, MTKViewDelegate {
         ring: [RingVertex],
         triangle: [TexturedVertex],
         trail: [TexturedVertex],
-        encoder: MTLRenderCommandEncoder
+        encoder: MTLRenderCommandEncoder,
+        sceneTarget: Bool = false
     ) {
+        let diskPipeline = sceneTarget ? sceneDiskPipeline : self.diskPipeline
+        let ringPipeline = sceneTarget ? sceneRingPipeline : self.ringPipeline
+        let trailPipeline = sceneTarget ? sceneTrailPipeline : self.trailPipeline
+
         encoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
 
         var diskEmission = BAEffect.disk.emission
@@ -580,14 +610,14 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private static func makePipeline(
         device: MTLDevice,
-        view: MTKView,
         vertexFunction: MTLFunction,
-        fragmentFunction: MTLFunction
+        fragmentFunction: MTLFunction,
+        pixelFormat: MTLPixelFormat
     ) throws -> MTLRenderPipelineState {
         let descriptor = MTLRenderPipelineDescriptor()
         descriptor.vertexFunction = vertexFunction
         descriptor.fragmentFunction = fragmentFunction
-        descriptor.colorAttachments[0].pixelFormat = view.colorPixelFormat
+        descriptor.colorAttachments[0].pixelFormat = pixelFormat
 
         let attachment = descriptor.colorAttachments[0]!
         attachment.isBlendingEnabled = true
