@@ -2,7 +2,7 @@
 
 A native macOS version of the **Blue Archive click effect and cursor trail**, written in **Swift + Metal**.
 
-It creates a transparent, borderless, always-on-top, **click-through** overlay covering the main screen. Global mouse events are observed with AppKit's global event monitor and fed into a CPU particle system; Metal renders particles/trail with runtime-generated textures.
+It creates a transparent, borderless, **click-through** overlay covering the main screen (floating above normal apps but below the macOS menu bar and Force Quit dialog). Global mouse events are observed with AppKit's global event monitor and fed into a CPU particle system; Metal renders particles/trail using the **original Circle_01 / Ring3 / Triangle_02_1 / Trail_03 textures** extracted from `ba-click-fx`.
 
 ## Status
 
@@ -12,11 +12,11 @@ This is an early working prototype:
 - ✅ Global click + mouse-move tracking
 - ✅ Click effect: center disk, rotating dissolve rings, flying shards
 - ✅ Cursor trail with fade
-- ✅ Metal rendering (vertex/fragment shaders, additive-ish alpha blending, simulated glow)
+- ✅ Metal rendering with original game textures + Unity particle curves (disk, dissolve rings, shards, trail)
 
 Not yet implemented (future work):
 
-- Exact Unity parameter-level fidelity and real multi-pass bloom
+- Real multi-pass MXFinalBloom / HDR
 - Multi-monitor support (currently only the main screen)
 - Background-aware capture / HDR
 - macOS ScreenCaptureKit integration
