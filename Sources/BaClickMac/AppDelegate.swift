@@ -26,29 +26,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let frame = screen.frame
 
-        // Transparent, borderless, always-on-top, click-through overlay.
-        let window = NSWindow(
+        // Non-activating NSPanel overlay — the same native recipe the Tauri
+        // version uses (to_panel + NonActivatingPanel + fullScreenAuxiliary
+        // + canJoinAllSpaces), which is what makes it appear above fullscreen
+        // apps. Regular NSWindows can't reliably do that.
+        let panel = NSPanel(
             contentRect: frame,
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false,
             screen: screen
         )
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.hasShadow = false
-        // screenSaver level so the overlay also appears above fullscreen apps.
-        // The window is click-through (ignoresMouseEvents), so this never
-        // blocks clicks or system UI.
-        window.level = .screenSaver
-        window.collectionBehavior = [
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.level = .floating
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = true
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [
             .canJoinAllSpaces,
             .stationary,
             .fullScreenAuxiliary,
             .ignoresCycle
         ]
-        window.ignoresMouseEvents = true
-        window.isReleasedWhenClosed = false
+        panel.ignoresMouseEvents = true
+        panel.isReleasedWhenClosed = false
+        window = panel
 
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal is not supported on this Mac")
@@ -67,8 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let renderer = Renderer(view: overlayView)
         self.renderer = renderer
-        window.contentView = overlayView
-        window.orderFrontRegardless()
+        window?.contentView = overlayView
+        window?.orderFrontRegardless()
 
         self.reapplyTransparency()
 
@@ -80,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 // Don't fight the intentional hide used for fullscreen apps.
                 guard !self.fullscreenHidden else { return }
-                self.window?.level = .screenSaver
+                self.window?.level = .floating
                 self.window?.orderFrontRegardless()
                 self.reapplyTransparency()
             }
@@ -161,8 +165,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clickLoopTimer = loop
         }
 
-        self.window = window
-
         // NOTE: do NOT call NSApp.activate(...) here. If our app becomes
         // frontmost, AppKit's global mouse monitor stops receiving clicks from
         // our own app and the effect appears dead until the user focuses
@@ -200,7 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlayView.isPaused = true
             overlayView.isPaused = false
             overlayView.draw() // force one frame now instead of waiting a tick
-            window?.level = .screenSaver
+            window?.level = .floating
             window?.orderFrontRegardless()
             reapplyTransparency()
         }
@@ -227,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Desktop, or user opted to attempt overlay over fullscreen.
             fullscreenHidden = false
             overlayView?.isPaused = false
-            window?.level = .screenSaver
+            window?.level = .floating
             window?.orderFrontRegardless()
             reapplyTransparency()
         }
