@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayView.layer?.backgroundColor = NSColor.clear.cgColor
         overlayView.framebufferOnly = true
         overlayView.colorPixelFormat = .bgra8Unorm
-        overlayView.preferredFramesPerSecond = 120
+        overlayView.preferredFramesPerSecond = 60
         overlayView.isPaused = false
         overlayView.enableSetNeedsDisplay = false
         self.overlayView = overlayView

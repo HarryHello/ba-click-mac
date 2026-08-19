@@ -275,8 +275,12 @@ final class Renderer: NSObject, MTKViewDelegate {
             return
         }
 
+        // Skip all bloom work when nothing is on screen (idle = near-zero GPU).
+        let hasContent = !diskVertices.isEmpty || !ringVertices.isEmpty ||
+            !triangleVertices.isEmpty || !trailVertices.isEmpty
+
         // 1) MXFinalBloom-style multi-level bloom on a single HDR scene.
-        if bloomEnabled,
+        if bloomEnabled, hasContent,
            let hdr = hdrSceneTexture,
            !bloomDownTextures.isEmpty,
            !bloomUpTextures.isEmpty {
@@ -343,7 +347,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             )
         }
 
-        if bloomEnabled, let finalBloom = bloomUpTextures.first, let hdrScene = hdrSceneTexture {
+        if bloomEnabled, hasContent, let finalBloom = bloomUpTextures.first, let hdrScene = hdrSceneTexture {
             encoder.setRenderPipelineState(bloomAddPipeline)
             encoder.setFragmentTexture(finalBloom, index: 0)
             encoder.setFragmentTexture(hdrScene, index: 1)
