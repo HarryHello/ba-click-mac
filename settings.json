@@ -5,12 +5,12 @@
   "trailScale": 1.4,
   "clickBloomStrength": 0.05,
   "clickBloomSigma": 14.0,
-  "trailBloomStrength": 6.0,
+  "trailBloomStrength": 4.0,
   "trailBloomSigma": 8.0,
   "bloomStrength": 1.7,
   "bloomLevels": 16,
   "bloomDiffusion": 7.0,
   "bloomThreshold": 1.0,
-  "bloomFalloff": 0.85,
-  "bloomBoost": 2.0
+  "bloomFalloff": 0.9,
+  "bloomBoost": 1.6
 }

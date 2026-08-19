@@ -167,7 +167,11 @@ enum ShaderSource {
         float4 s = tex.sample(samp, in.uv);
         float particleAlpha = clamp(in.particleAlpha, 0.0, 1.0);
         float coverageFactor = clamp(in.coverageFactor, 0.0, 1.0);
-        float coverage = s.a * particleAlpha * coverageFactor;
+        // Trail_03 keeps its shape in RGB (teardrop) with a constant alpha;
+        // coverage must follow the texture brightness so the fading tail
+        // becomes transparent instead of an opaque black block.
+        float textureShape = max(max(s.r, s.g), s.b);
+        float coverage = s.a * textureShape * particleAlpha * coverageFactor;
         float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha;
         float3 srgb = float3(linearToSrgb(emission.r), linearToSrgb(emission.g), linearToSrgb(emission.b));
         return float4(srgb * coverage, coverage);
@@ -185,7 +189,8 @@ enum ShaderSource {
         float4 s = tex.sample(samp, in.uv);
         float particleAlpha = clamp(in.particleAlpha, 0.0, 1.0);
         float coverageFactor = clamp(in.coverageFactor, 0.0, 1.0);
-        float coverage = s.a * particleAlpha * coverageFactor;
+        float textureShape = max(max(s.r, s.g), s.b);
+        float coverage = s.a * textureShape * particleAlpha * coverageFactor;
         float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha * max(emissionScale, 0.0);
         return float4(emission, coverage);
     }
@@ -320,8 +325,9 @@ enum ShaderSource {
             return float4(0.0);
         }
         // Near-linear falloff: bright near the source, smooth decay, no
-        // far-field fog lift (game glow is additive-linear).
-        float a = pow(clamp(lum, 0.0, 1.0), max(falloff, 0.6));
+        // far-field fog lift (game glow is additive-linear). Cap so the halo
+        // stays translucent and hugs the trail instead of forming a solid blob.
+        float a = min(0.8, pow(clamp(lum, 0.0, 1.0), max(falloff, 0.6)));
         // Lighten the deep-blue halo toward the game's bright cyan glow.
         float3 n = e / lum;
         float3 lightCyan = float3(0.6, 0.9, 1.0);
