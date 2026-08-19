@@ -1,6 +1,7 @@
 import AppKit
 import MetalKit
 import QuartzCore
+import CoreGraphics
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
@@ -11,6 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusTimer: Timer?
     private var spaceObserver: NSObjectProtocol?
     private var clickLoopTimer: Timer?
+    /// Set when we intentionally hid+paused the overlay for a fullscreen app,
+    /// so recover()/checkStall() don't fight the hidden state.
+    private var fullscreenHidden = false
+    private var lastFullscreenState: Bool?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
@@ -73,6 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let recover: (Notification) -> Void = { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
+                // Don't fight the intentional hide used for fullscreen apps.
+                guard !self.fullscreenHidden else { return }
                 self.window?.level = .screenSaver
                 self.window?.orderFrontRegardless()
                 self.reapplyTransparency()
@@ -118,8 +125,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         label.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
         overlayView.addSubview(label)
         self.statusLabel = label
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.updateStatus()
+            self?.updateFullscreenState()
             self?.checkStall()
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -183,6 +191,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the display link, force an immediate frame and reassert the layer.
     private func checkStall() {
         guard let renderer, let overlayView else { return }
+        // If we intentionally stopped rendering for a fullscreen app, that's
+        // not a stall — don't wake it up to burn GPU behind the fullscreen app.
+        if fullscreenHidden { return }
         guard renderer.lastDrawTime > 0 else { return }
         let now = CACurrentMediaTime()
         if now - renderer.lastDrawTime > 0.5 {
@@ -193,6 +204,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window?.orderFrontRegardless()
             reapplyTransparency()
         }
+    }
+
+    /// React to another app entering/exiting fullscreen. If the user disabled
+    /// showInFullscreen, hide the overlay and stop rendering entirely so no
+    /// GPU work happens behind the fullscreen app. Otherwise (or on desktop)
+    /// show and resume. Runs on a state-change basis, so it's cheap.
+    private func updateFullscreenState() {
+        guard let renderer else { return }
+        let fullscreen = isFullscreenAppActive()
+        if fullscreen == lastFullscreenState { return }
+        lastFullscreenState = fullscreen
+
+        let show = fullscreen && renderer.settings.showInFullscreen
+
+        if fullscreen && !show {
+            // Hide + fully stop rendering behind the fullscreen app.
+            fullscreenHidden = true
+            window?.orderOut(nil)
+            overlayView?.isPaused = true
+        } else {
+            // Desktop, or user opted to attempt overlay over fullscreen.
+            fullscreenHidden = false
+            overlayView?.isPaused = false
+            window?.level = .screenSaver
+            window?.orderFrontRegardless()
+            reapplyTransparency()
+        }
+    }
+
+    /// Best-effort detection of whether the frontmost app has a fullscreen
+    /// window covering the screen (layer 0, on-screen, screen-sized bounds).
+    /// Bounds/layer need no screen-recording permission (only names do).
+    private func isFullscreenAppActive() -> Bool {
+        guard let screenFrame = window?.screen?.frame else { return false }
+        let minW = screenFrame.width * 0.97
+        let minH = screenFrame.height * 0.97
+        guard let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly], kCGNullWindowID
+        ) as? [[String: Any]] else { return false }
+        let frontPID = Int(
+            NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1
+        )
+        for info in list {
+            guard let pid = info[kCGWindowOwnerPID as String] as? Int,
+                  pid == frontPID else { continue }
+            guard let layer = info[kCGWindowLayer as String] as? Int,
+                  layer == 0 else { continue }
+            guard let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                  let w = bounds["Width"] as? Double,
+                  let h = bounds["Height"] as? Double else { continue }
+            if w >= minW && h >= minH {
+                return true
+            }
+        }
+        return false
     }
 
     private func updateStatus() {
