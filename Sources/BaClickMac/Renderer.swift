@@ -467,7 +467,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             let alpha = BAEval.number(BAEffect.disk.alphaKeys, progress)
             guard alpha > 0.01 else { continue }
 
-            let size = BAEffect.disk.radius * settings.diskScale * BAEval.hermite(BAEffect.disk.sizeKeys, progress) * scale
+// disk.radius is a radius in px; the sprite size is the full width (2r) so
+            // the disk matches the arcs' radius (both ~0.12 world units).
+            let size = BAEffect.disk.radius * 2 * settings.diskScale * BAEval.hermite(BAEffect.disk.sizeKeys, progress) * scale
             let color = BAEval.color(BAEffect.disk.colorKeys, progress)
             let material = Renderer.linearEnergy(color, intensity: BAEffect.disk.emission)
             appendTexturedSprite(
