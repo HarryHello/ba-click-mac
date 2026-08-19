@@ -321,9 +321,10 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder: encoder
         )
 
-        if bloomEnabled, let finalBloom = bloomUpTextures.first {
+        if bloomEnabled, let finalBloom = bloomUpTextures.first, let hdrScene = hdrSceneTexture {
             encoder.setRenderPipelineState(bloomAddPipeline)
             encoder.setFragmentTexture(finalBloom, index: 0)
+            encoder.setFragmentTexture(hdrScene, index: 1)
             encoder.setFragmentSamplerState(sampler, index: 0)
             var strength = settings.bloomStrength
             var falloff = settings.bloomFalloff
@@ -401,16 +402,22 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         encoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
 
-        var diskEmission = BAEffect.disk.emission
+        // Separate glow source intensity for click vs trail: the HDR scene
+        // brightness controls how strongly each contributes to bloom.
+        var diskEmission = BAEffect.disk.emission * (sceneTarget ? settings.clickBloomStrength : 1.0)
         encoder.setFragmentBytes(&diskEmission, length: MemoryLayout<Float>.size, index: 2)
         drawTextured(vertices: disk, texture: circleTexture, pipeline: diskPipeline, encoder: encoder)
 
-        var ringEmission = BAEffect.rings.hdrIntensity
+        var ringEmission = BAEffect.rings.hdrIntensity * (sceneTarget ? settings.clickBloomStrength : 1.0)
         encoder.setFragmentBytes(&ringEmission, length: MemoryLayout<Float>.size, index: 2)
         drawRing(vertices: ring, texture: ringTexture, pipeline: ringPipeline, encoder: encoder)
 
-        drawTextured(vertices: triangle, texture: triangleTexture, pipeline: trianglePipeline, encoder: encoder)
+        if sceneTarget {
+            var trailEmission = settings.trailBloomStrength
+            encoder.setFragmentBytes(&trailEmission, length: MemoryLayout<Float>.size, index: 2)
+        }
         drawTextured(vertices: trail, texture: trailTexture, pipeline: trailPipeline, encoder: encoder)
+        drawTextured(vertices: triangle, texture: triangleTexture, pipeline: trianglePipeline, encoder: encoder)
     }
 
     // MARK: - Geometry building

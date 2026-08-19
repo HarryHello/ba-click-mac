@@ -179,13 +179,14 @@ enum ShaderSource {
     fragment float4 trail_scene_fragment(
         TexturedVertexOut in [[stage_in]],
         texture2d<float> tex [[texture(0)]],
-        sampler samp [[sampler(0)]]
+        sampler samp [[sampler(0)]],
+        constant float &emissionScale [[buffer(2)]]
     ) {
         float4 s = tex.sample(samp, in.uv);
         float particleAlpha = clamp(in.particleAlpha, 0.0, 1.0);
         float coverageFactor = clamp(in.coverageFactor, 0.0, 1.0);
         float coverage = s.a * particleAlpha * coverageFactor;
-        float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha;
+        float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha * max(emissionScale, 0.0);
         return float4(emission, coverage);
     }
 
@@ -282,13 +283,18 @@ enum ShaderSource {
     fragment float4 bloom_add_fragment(
         FullscreenOut in [[stage_in]],
         texture2d<float> bloom [[texture(0)]],
+        texture2d<float> scene [[texture(1)]],
         sampler samp [[sampler(0)]],
         constant float &strength [[buffer(0)]],
         constant float &falloff [[buffer(1)]]
     ) {
         float2 uv = float2(in.uv.x, 1.0 - in.uv.y);
         float4 b = bloom.sample(samp, uv);
-        float3 c = clamp(b.rgb * max(strength, 0.0), 0.0, 1.0);
+        float4 s = scene.sample(samp, uv);
+        // Halo-only: subtract the bright source core so we add the outer weak
+        // glow, not a duplicate of the already-bright trail/click body.
+        float3 halo = max(b.rgb - s.rgb * 0.85, 0.0);
+        float3 c = clamp(halo * max(strength, 0.0), 0.0, 1.0);
         // Higher falloff keeps the center bright while making the edges fade
         // out faster (peaked glow).
         c = pow(c, max(falloff, 0.1));
