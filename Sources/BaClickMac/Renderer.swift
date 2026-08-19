@@ -515,6 +515,49 @@ final class Renderer: NSObject, MTKViewDelegate {
             let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: fromAlpha, coverageFactor: fromCov)
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
         }
+
+        // Pointed caps at both ends (original numCapVertices=1) so the trail
+        // head is rounded/pointed instead of a flat square cut.
+        appendTrailCap(points: points, distances: distances, totalLength: totalLength, halfWidth: halfWidth, now: now, atEnd: true, to: &vertices)
+        appendTrailCap(points: points, distances: distances, totalLength: totalLength, halfWidth: halfWidth, now: now, atEnd: false, to: &vertices)
+    }
+
+    private func appendTrailCap(
+        points: [TrailPoint],
+        distances: [Float],
+        totalLength: Float,
+        halfWidth: Float,
+        now: Double,
+        atEnd: Bool,
+        to vertices: inout [TexturedVertex]
+    ) {
+        let lifetime: Double = 0.3
+        let index = atEnd ? points.count - 1 : 0
+        let point = points[index]
+        let neighbor = atEnd ? points[index - 1] : points[index + 1]
+        let direction = simd_normalize(point.position - neighbor.position)
+        let normal = SIMD2(-direction.y, direction.x)
+        let offset = normal * halfWidth
+        let forward: Float = atEnd ? 1 : -1
+        let left = point.position + offset
+        let right = point.position - offset
+        let tip = point.position + direction * halfWidth * forward
+
+        let progress = (distances[index] ) / totalLength
+        let color = Renderer.linearEnergy(
+            BAEval.color(BAEffect.trail.gradient, progress),
+            intensity: 23.968628
+        )
+        let age = max(0, min(1, (now - point.time) / lifetime))
+        let fade = Float(1 - age)
+        let cov = BAEval.number(BAEffect.trail.coverageLongitudinalKeys, progress) * fade
+        let alpha = BAEffect.trail.trailOpacity * fade
+        let u = 1 - progress
+
+        let c0 = TexturedVertex(position: left, uv: SIMD2(u, 1), color: color, particleAlpha: alpha, coverageFactor: cov)
+        let c1 = TexturedVertex(position: tip, uv: SIMD2(u, 0.5), color: color, particleAlpha: alpha, coverageFactor: cov)
+        let c2 = TexturedVertex(position: right, uv: SIMD2(u, 0), color: color, particleAlpha: alpha, coverageFactor: cov)
+        vertices.append(contentsOf: [c0, c1, c2])
     }
 
     // MARK: - Vertex builders
