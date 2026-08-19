@@ -5,6 +5,8 @@ import CoreGraphics
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
+    private var primaryWindow: NSWindow?
+    private var fullscreenPanel: NSPanel?
     private var overlayView: TransparentMTKView?
     private var mouseMonitor: MouseMonitor?
     private var renderer: Renderer?
@@ -26,10 +28,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let frame = screen.frame
 
-        // Non-activating NSPanel overlay — the same native recipe the Tauri
-        // version uses (to_panel + NonActivatingPanel + fullScreenAuxiliary
-        // + canJoinAllSpaces), which is what makes it appear above fullscreen
-        // apps. Regular NSWindows can't reliably do that.
+        // Two-window architecture (as requested):
+        //  - primaryWindow: the original top-level overlay for the normal
+        //    desktop — covers everything, never shrinks into Mission Control,
+        //    stays on top with "Show Desktop".
+        //  - fullscreenPanel: a non-activating NSPanel (Tauri recipe) that gets
+        //    added onto the fullscreen app's Space so it overlays fullscreen
+        //    apps. Only used while a fullscreen app is active.
+        let primary = NSWindow(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false,
+            screen: screen
+        )
+        primary.isOpaque = false
+        primary.backgroundColor = .clear
+        primary.hasShadow = false
+        primary.level = .screenSaver
+        primary.collectionBehavior = [
+            .canJoinAllSpaces,
+            .stationary,
+            .ignoresCycle
+        ]
+        primary.ignoresMouseEvents = true
+        primary.isReleasedWhenClosed = false
+        primaryWindow = primary
+
         let panel = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -51,7 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
-        window = panel
+        fullscreenPanel = panel
+
+        window = primary
 
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal is not supported on this Mac")
@@ -83,9 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 // Don't fight the intentional hide used for fullscreen apps.
                 guard !self.fullscreenHidden else { return }
-                self.window?.level = .floating
-                self.window?.orderFrontRegardless()
                 self.reapplyTransparency()
+                self.overlayView?.window?.orderFrontRegardless()
             }
         }
         self.spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -175,10 +201,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Re-assert the CAMetalLayer transparency. The layer can reset its
-    /// opaque/background state when the view is re-attached after a Spaces
-    /// switch, which otherwise makes the overlay disappear.
+    /// opaque/background state when the view is re-attached (after a Spaces
+    /// switch or when moved between primary window and fullscreen panel),
+    /// which otherwise makes the overlay disappear.
     private func reapplyTransparency() {
-        guard let view = window?.contentView else { return }
+        guard let view = overlayView else { return }
         DispatchQueue.main.async {
             view.wantsLayer = true
             view.layer?.isOpaque = false
@@ -201,36 +228,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlayView.isPaused = true
             overlayView.isPaused = false
             overlayView.draw() // force one frame now instead of waiting a tick
-            window?.level = .floating
-            window?.orderFrontRegardless()
+            overlayView.window?.orderFrontRegardless()
             reapplyTransparency()
         }
     }
 
-    /// React to another app entering/exiting fullscreen. If the user disabled
-    /// showInFullscreen, hide the overlay and stop rendering entirely so no
-    /// GPU work happens behind the fullscreen app. Otherwise (or on desktop)
-    /// show and resume. Runs on a state-change basis, so it's cheap.
+    /// Two-window switch:
+    ///  - desktop: the Metal view lives in the top-level primaryWindow (covers
+    ///    everything, never shrinks into Mission Control, survives Show Desktop).
+    ///  - fullscreen (showInFullscreen=true): the view moves into the
+    ///    non-activating fullscreenPanel (Tauri recipe) which is added onto the
+    ///    fullscreen app's Space.
+    ///  - fullscreen (showInFullscreen=false): hide + stop rendering (no GPU
+    ///    work behind the fullscreen app).
     private func updateFullscreenState() {
         guard let renderer else { return }
         let fullscreen = isFullscreenAppActive()
         if fullscreen == lastFullscreenState { return }
         lastFullscreenState = fullscreen
 
-        let show = fullscreen && renderer.settings.showInFullscreen
+        guard let overlayView else { return }
 
-        if fullscreen && !show {
-            // Hide + fully stop rendering behind the fullscreen app.
-            fullscreenHidden = true
-            window?.orderOut(nil)
-            overlayView?.isPaused = true
+        if fullscreen {
+            if renderer.settings.showInFullscreen {
+                fullscreenHidden = false
+                primaryWindow?.orderOut(nil)
+                if overlayView.window !== fullscreenPanel {
+                    fullscreenPanel?.contentView = overlayView
+                }
+                overlayView.isPaused = false
+                fullscreenPanel?.orderFrontRegardless()
+                reapplyTransparency()
+                overlayView.draw()
+            } else {
+                fullscreenHidden = true
+                primaryWindow?.orderOut(nil)
+                fullscreenPanel?.orderOut(nil)
+                overlayView.isPaused = true
+            }
         } else {
-            // Desktop, or user opted to attempt overlay over fullscreen.
             fullscreenHidden = false
-            overlayView?.isPaused = false
-            window?.level = .floating
-            window?.orderFrontRegardless()
+            fullscreenPanel?.orderOut(nil)
+            if overlayView.window !== primaryWindow {
+                primaryWindow?.contentView = overlayView
+            }
+            overlayView.isPaused = false
+            primaryWindow?.orderFrontRegardless()
             reapplyTransparency()
+            overlayView.draw()
         }
     }
 
@@ -238,7 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// window covering the screen (layer 0, on-screen, screen-sized bounds).
     /// Bounds/layer need no screen-recording permission (only names do).
     private func isFullscreenAppActive() -> Bool {
-        guard let screenFrame = window?.screen?.frame else { return false }
+        guard let screenFrame = primaryWindow?.screen?.frame else { return false }
         let minW = screenFrame.width * 0.97
         let minH = screenFrame.height * 0.97
         guard let list = CGWindowListCopyWindowInfo(
