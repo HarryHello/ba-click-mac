@@ -13,5 +13,5 @@
   "bloomThreshold": 1.0,
   "bloomFalloff": 0.35,
   "bloomBoost": 1.2,
-  "showInFullscreen": false
+  "showInFullscreen": true
 }

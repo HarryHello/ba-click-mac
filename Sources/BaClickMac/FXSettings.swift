@@ -8,11 +8,12 @@ struct FXSettings: Codable {
     var ringScale: Float = 0.8
     var shardScale: Float = 0.8
     var trailScale: Float = 1.8
-    // When another app is in fullscreen: macOS won't let a normal panel
-    // composite over the fullscreen surface, so the sensible default is false:
-    // hide the overlay and stop rendering (no wasted GPU behind the fullscreen
-    // app). Set true to attempt overlay (rarely shown) — your choice.
-    var showInFullscreen: Bool = false
+    // The NSPanel (+ fullScreenAuxiliary + canJoinAllSpaces) is added onto the
+    // fullscreen app's Space, so the fullscreen desktop contains BOTH windows
+    // (app window + this overlay) — that's how it appears over fullscreen apps.
+    // Default true so the panel is kept on the fullscreen Space; set false to
+    // hide + stop rendering (no GPU work) over fullscreen instead.
+    var showInFullscreen: Bool = true
     // Click bloom source is intentionally weak; users can raise it if wanted.
     var clickBloomStrength: Float = 0.05
     var clickBloomSigma: Float = 14.0
