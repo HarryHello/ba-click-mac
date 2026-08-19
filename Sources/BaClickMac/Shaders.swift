@@ -221,6 +221,11 @@ enum ShaderSource {
         // Higher falloff keeps the center bright while making the edges fade
         // out faster (peaked glow).
         c = pow(c, max(falloff, 0.1));
+        // HDR glow lightens toward white/sky at the bright core instead of
+        // staying saturated pure blue.
+        float lum = max(max(c.r, c.g), c.b);
+        float whiteMix = clamp(lum * 0.5, 0.0, 1.0);
+        c = mix(c, float3(1.0, 1.0, 1.0), whiteMix * 0.35);
         float a = min(1.0, max(max(c.r, c.g), c.b));
         return float4(c * a, a);
     }

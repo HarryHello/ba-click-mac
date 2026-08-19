@@ -214,9 +214,9 @@ enum BAEffect {
         static let trailOpacity: Float = 1.0
         static let gradient: [[Float]] = [
             [0, 0, 0, 0],
-            [0.5794156, 0, 24.19, 72],
-            [0.97941558, 0, 99.6, 255],
-            [1, 0, 99.6, 255]
+            [0.5794156, 0, 50, 130],
+            [0.97941558, 0, 160, 255],
+            [1, 0, 175, 255]
         ]
         static let coverageLongitudinalKeys: [[Float]] = [
             [0, 0.15],
