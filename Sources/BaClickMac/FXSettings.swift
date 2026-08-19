@@ -3,10 +3,11 @@ import Foundation
 /// Runtime tuning parameters. Edit `settings.json` next to the executable
 /// (or in the working directory) and save — the app reloads it every 0.5s.
 struct FXSettings: Codable {
-    var diskScale: Float = 1.5
-    var ringScale: Float = 0.85
+    // Faithful to the original prefab (no artificial scaling).
+    var diskScale: Float = 1.0
+    var ringScale: Float = 1.0
     var shardScale: Float = 1.0
-    var trailScale: Float = 1.4
+    var trailScale: Float = 1.0
     // Click bloom source is intentionally weak; users can raise it if wanted.
     var clickBloomStrength: Float = 0.05
     var clickBloomSigma: Float = 14.0

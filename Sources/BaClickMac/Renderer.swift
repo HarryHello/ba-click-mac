@@ -490,7 +490,8 @@ final class Renderer: NSObject, MTKViewDelegate {
             guard progress >= 0, progress < 1 else { continue }
 
             let sizeFactor = BAEval.hermite(BAEffect.rings.sizeKeys, progress)
-            let dissolve = BAEval.hermite(BAEffect.rings.dissolveKeys, progress)
+            // Original Custom1.x dissolve is a linear key curve (1 -> 0 -> 1).
+            let dissolve = BAEval.number(BAEffect.rings.dissolveKeys, progress)
             let color = BAEval.color(BAEffect.rings.colorKeys, progress)
             let material = Renderer.linearEnergy(color, intensity: BAEffect.rings.hdrIntensity)
 

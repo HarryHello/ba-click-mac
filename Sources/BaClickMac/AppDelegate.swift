@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusLabel: NSTextField?
     private var statusTimer: Timer?
     private var spaceObserver: NSObjectProtocol?
+    private var clickLoopTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
@@ -105,6 +106,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         monitor.start()
         mouseMonitor = monitor
+
+        // BA_CLICK_LOOP=1 auto-spawns a click at screen center every 0.9s so
+        // the click animation (disk -> arcs -> shrink) can be inspected in
+        // isolation without the cursor trail.
+        if getenv("BA_CLICK_LOOP") != nil {
+            let center = SIMD2<Float>(
+                Float(frame.midX),
+                Float(frame.midY)
+            )
+            let loop = Timer(timeInterval: 0.9, repeats: true) { [weak renderer] _ in
+                renderer?.particleSystem.addClick(at: center)
+            }
+            RunLoop.main.add(loop, forMode: .common)
+            clickLoopTimer = loop
+        }
 
         self.window = window
 
