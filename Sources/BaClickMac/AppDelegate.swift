@@ -97,6 +97,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main,
             using: recover
         )
+        // Every time another app becomes frontmost (including entering
+        // fullscreen), re-assert the overlay above it. Fullscreen apps take
+        // over a Space; the .fullScreenAuxiliary overlay needs to re-order
+        // onto that Space or it stays hidden behind the fullscreen content.
+        _ = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main,
+            using: recover
+        )
 
         // TEMP debug HUD: show bloom/settings/particle state on the overlay.
         let label = NSTextField(labelWithString: "ba-click status")
