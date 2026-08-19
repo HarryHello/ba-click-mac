@@ -14,14 +14,17 @@ struct FXSettings: Codable {
     // Trail glow is mostly carried by the Trail_03 texture (self-luminous
     // streak); the blur bloom is only a tiny tight halo so it won't form round
     // blobs or accumulate brightness with trail length.
-    var trailBloomStrength: Float = 0.5
+    var trailBloomStrength: Float = 1.5
     var trailBloomSigma: Float = 8.0
     // Unified MXFinalBloom intensity used by the multi-level bloom path.
     var bloomStrength: Float = 1.0
     // Number of pyramid levels: more levels = wider glow.
-    var bloomLevels: Int = 6
+    var bloomLevels: Int = 8
+    // Prefilter threshold: lower catches weak HDR energy so the outer glow is
+    // visible instead of only the brightest core.
+    var bloomThreshold: Float = 0.05
     // >1 makes the glow peak brighter and fall off faster around the edges.
-    var bloomFalloff: Float = 2.0
+    var bloomFalloff: Float = 1.5
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()

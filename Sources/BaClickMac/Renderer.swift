@@ -349,7 +349,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         encoder.setRenderPipelineState(prefilterPipeline)
         encoder.setFragmentTexture(source, index: 0)
         encoder.setFragmentSamplerState(sampler, index: 0)
-        var threshold: Float = 1.0
+        var threshold = settings.bloomThreshold
         encoder.setFragmentBytes(&threshold, length: MemoryLayout<Float>.size, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
@@ -529,7 +529,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
 
         let halfWidth = BAEffect.trail.width * settings.trailScale * scale * 0.5
-        let materialIntensity: Float = 23.968628
+        let materialIntensity: Float = 8.0
 
         for i in 1..<points.count {
             let from = points[i - 1]
