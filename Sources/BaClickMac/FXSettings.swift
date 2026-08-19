@@ -14,15 +14,19 @@ struct FXSettings: Codable {
     // trail lights up the area around it.
     var trailBloomStrength: Float = 4.0
     var trailBloomSigma: Float = 8.0
-    // Unified MXFinalBloom intensity used by the multi-level bloom path.
-    var bloomStrength: Float = 1.0
-    // Number of pyramid levels: more levels = wider glow.
-    var bloomLevels: Int = 8
-    // Prefilter threshold: lower catches weak HDR energy so the outer glow is
-    // visible instead of only the brightest core.
-    var bloomThreshold: Float = 0.05
-    // Low-gamma falloff: < 1 lifts the faint outer halo so it visibly
-    // illuminates the surroundings; > 1 tightens the glow.
+    // Game MXFinalBloom exposure. Original uses Intensity 1.7, which becomes
+    // 2^(1.7/10)-1 = 0.125 in the composite.
+    var bloomStrength: Float = 1.7
+    // Maximum pyramid levels; the actual count follows the original diffusion
+    // formula and this only caps it.
+    var bloomLevels: Int = 16
+    // Original MXFinalBloom diffusion, drives iteration count and sample scale.
+    var bloomDiffusion: Float = 7.0
+    // Original MXFinalBloom prefilter threshold (in gamma space; shader converts
+    // to linear). Game value is 1.0.
+    var bloomThreshold: Float = 1.0
+    // Low-gamma alpha lift for the transparent overlay: < 1 lifts the faint
+    // outer halo so it visibly illuminates the surroundings; > 1 tightens it.
     var bloomFalloff: Float = 0.6
 
     static func load() -> FXSettings {

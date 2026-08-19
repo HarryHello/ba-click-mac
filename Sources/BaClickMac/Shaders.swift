@@ -207,21 +207,25 @@ enum ShaderSource {
         return out;
     }
 
-    // Composite pass: scene + blurred bloom, additive-ish glow on a
-    // transparent overlay.
+    // Composite pass (original MXFinalBloom): source + 4-tap bloom * intensity.
     fragment float4 composite_fragment(
         FullscreenOut in [[stage_in]],
         texture2d<float> scene [[texture(0)]],
         texture2d<float> bloom [[texture(1)]],
         sampler samp [[sampler(0)]],
-        constant float &bloomStrength [[buffer(0)]]
+        constant float2 &bloomTexel [[buffer(0)]],
+        constant float2 &sampleScaleAndIntensity [[buffer(1)]]
     ) {
-        // The offscreen scene/bloom row order is top-left, while the fullscreen
-        // triangle's v=0 is at the bottom; flip V so sampling isn't mirrored.
         float2 uv = float2(in.uv.x, 1.0 - in.uv.y);
+        float2 offset = bloomTexel * sampleScaleAndIntensity.x * 0.5;
+        float3 b =
+            bloom.sample(samp, uv + offset * float2(-1.0, -1.0)).rgb +
+            bloom.sample(samp, uv + offset * float2(1.0, -1.0)).rgb +
+            bloom.sample(samp, uv + offset * float2(-1.0, 1.0)).rgb +
+            bloom.sample(samp, uv + offset * float2(1.0, 1.0)).rgb;
+        b *= 0.25 * sampleScaleAndIntensity.y;
         float4 s = scene.sample(samp, uv);
-        float4 b = bloom.sample(samp, uv);
-        float3 color = clamp(s.rgb + b.rgb * max(bloomStrength, 0.0), 0.0, 1.0);
+        float3 color = s.rgb + b;
         float maxColor = max(max(color.r, color.g), color.b);
         float alpha = clamp(max(s.a, maxColor), 0.0, 1.0);
         return float4(color * alpha, alpha);
@@ -231,20 +235,31 @@ enum ShaderSource {
         return float2(uv.x, 1.0 - uv.y);
     }
 
-    // MXFinalBloom prefilter: keep only energy above the threshold.
+    // MXFinalBloom prefilter: 4-tap around the destination texel, HDR clamp
+    // and the original hard-threshold soft-knee formula.
     fragment float4 prefilter_fragment(
         FullscreenOut in [[stage_in]],
         texture2d<float> src [[texture(0)]],
         sampler samp [[sampler(0)]],
-        constant float &threshold [[buffer(0)]]
+        constant float2 &texel [[buffer(0)]],
+        constant float4 &threshold [[buffer(1)]],
+        constant float &clampValue [[buffer(2)]]
     ) {
-        float4 c = src.sample(samp, flipUV(in.uv));
-        float l = max(max(c.r, c.g), c.b);
-        float contribution = max(l - max(threshold, 0.0), 0.0);
-        if (contribution <= 0.0) {
-            return float4(0.0);
-        }
-        return float4(c.rgb * contribution / max(l, 0.00001), contribution);
+        float2 uv = flipUV(in.uv);
+        float4 sum =
+            src.sample(samp, uv + texel * float2(-1.0, -1.0)) +
+            src.sample(samp, uv + texel * float2(1.0, -1.0)) +
+            src.sample(samp, uv + texel * float2(-1.0, 1.0)) +
+            src.sample(samp, uv + texel * float2(1.0, 1.0));
+        float4 c = min(sum * 0.25, min(65504.0, clampValue));
+
+        float brightness = max(max(c.r, c.g), c.b);
+        float soft = brightness - threshold.y;
+        soft = clamp(soft, 0.0, threshold.z);
+        soft = soft * soft * threshold.w;
+        float contribution = max(soft, brightness - threshold.x);
+        contribution /= max(brightness, 0.0001);
+        return c * contribution;
     }
 
     fragment float4 downsample_fragment(
@@ -255,10 +270,10 @@ enum ShaderSource {
     ) {
         float2 uv = flipUV(in.uv);
         float4 sum =
-            src.sample(samp, uv + texel * float2(-0.5, -0.5)) +
-            src.sample(samp, uv + texel * float2(0.5, -0.5)) +
-            src.sample(samp, uv + texel * float2(-0.5, 0.5)) +
-            src.sample(samp, uv + texel * float2(0.5, 0.5));
+            src.sample(samp, uv + texel * float2(-1.0, -1.0)) +
+            src.sample(samp, uv + texel * float2(1.0, -1.0)) +
+            src.sample(samp, uv + texel * float2(-1.0, 1.0)) +
+            src.sample(samp, uv + texel * float2(1.0, 1.0));
         return sum * 0.25;
     }
 
@@ -267,32 +282,39 @@ enum ShaderSource {
         texture2d<float> coarse [[texture(0)]],
         texture2d<float> fine [[texture(1)]],
         sampler samp [[sampler(0)]],
-        constant float2 &coarseTexel [[buffer(0)]]
+        constant float2 &coarseTexel [[buffer(0)]],
+        constant float &sampleScale [[buffer(1)]]
     ) {
         float2 uv = flipUV(in.uv);
+        float2 offset = coarseTexel * sampleScale * 0.5;
         float4 acc =
-            coarse.sample(samp, uv + coarseTexel * float2(-0.5, -0.5)) +
-            coarse.sample(samp, uv + coarseTexel * float2(0.5, -0.5)) +
-            coarse.sample(samp, uv + coarseTexel * float2(-0.5, 0.5)) +
-            coarse.sample(samp, uv + coarseTexel * float2(0.5, 0.5));
+            coarse.sample(samp, uv + offset * float2(-1.0, -1.0)) +
+            coarse.sample(samp, uv + offset * float2(1.0, -1.0)) +
+            coarse.sample(samp, uv + offset * float2(-1.0, 1.0)) +
+            coarse.sample(samp, uv + offset * float2(1.0, 1.0));
         return acc * 0.25 + fine.sample(samp, uv);
     }
 
-    // Bloom overlay: adds the full blurred bloom on top of the sharp core.
-    // This is what actually "lights up the surroundings" — no core subtraction.
+    // Bloom overlay: original MXFinalBloom 4-tap composite added on top of the
+    // already-drawn core, with intensity conversion 2^(I/10)-1.
     fragment float4 bloom_add_fragment(
         FullscreenOut in [[stage_in]],
         texture2d<float> bloom [[texture(0)]],
         texture2d<float> scene [[texture(1)]],
         sampler samp [[sampler(0)]],
-        constant float &strength [[buffer(0)]],
-        constant float &falloff [[buffer(1)]]
+        constant float2 &bloomTexel [[buffer(0)]],
+        constant float2 &sampleScaleAndIntensity [[buffer(1)]],
+        constant float &falloff [[buffer(2)]]
     ) {
         float2 uv = float2(in.uv.x, 1.0 - in.uv.y);
-        float4 b = bloom.sample(samp, uv);
-        // Use the whole bloom image, not a halo-only subtraction. The source
-        // core is already drawn; adding bloom makes the surroundings glow.
-        float3 e = b.rgb * max(strength, 0.0);
+        float2 offset = bloomTexel * sampleScaleAndIntensity.x * 0.5;
+        float3 b =
+            bloom.sample(samp, uv + offset * float2(-1.0, -1.0)).rgb +
+            bloom.sample(samp, uv + offset * float2(1.0, -1.0)).rgb +
+            bloom.sample(samp, uv + offset * float2(-1.0, 1.0)).rgb +
+            bloom.sample(samp, uv + offset * float2(1.0, 1.0)).rgb;
+        float3 e = b * (0.25 * sampleScaleAndIntensity.y);
+
         float lum = max(max(e.r, e.g), e.b);
         if (lum <= 0.001) {
             return float4(0.0);

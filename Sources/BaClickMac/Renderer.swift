@@ -66,6 +66,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var bloomUpTextures: [MTLTexture] = []
     private var bloomLevelSizes: [CGSize] = []
     private var bloomLevelCount: Int = 4
+    private var bloomSampleScale: Float = 1.0
+    private var lastBloomLevels: Int = 16
+    private var lastBloomDiffusion: Float = 7.0
     private var sceneSize: CGSize = .zero
     private weak var currentView: MTKView?
     private(set) var settings: FXSettings
@@ -229,8 +232,10 @@ final class Renderer: NSObject, MTKViewDelegate {
             settings = FXSettings.load()
             particleSystem.ringScale = settings.ringScale
             particleSystem.shardScale = settings.shardScale
-            if settings.bloomLevels != bloomLevelCount {
-                bloomLevelCount = max(1, settings.bloomLevels)
+            if settings.bloomLevels != lastBloomLevels ||
+                settings.bloomDiffusion != lastBloomDiffusion {
+                lastBloomLevels = settings.bloomLevels
+                lastBloomDiffusion = settings.bloomDiffusion
                 sceneSize = .zero
                 if let view = currentView {
                     updateProjection(view: view)
@@ -326,10 +331,16 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder.setFragmentTexture(finalBloom, index: 0)
             encoder.setFragmentTexture(hdrScene, index: 1)
             encoder.setFragmentSamplerState(sampler, index: 0)
-            var strength = settings.bloomStrength
+            var bloomTexel = SIMD2<Float>(
+                1.0 / Float(max(finalBloom.width, 1)),
+                1.0 / Float(max(finalBloom.height, 1))
+            )
+            encoder.setFragmentBytes(&bloomTexel, length: MemoryLayout<SIMD2<Float>>.stride, index: 0)
+            let intensityFactor = Float(Foundation.exp(Double(settings.bloomStrength) / 10.0 * 0.6931471805599453) - 1.0)
+            var sampleScaleAndIntensity = SIMD2<Float>(bloomSampleScale, intensityFactor)
+            encoder.setFragmentBytes(&sampleScaleAndIntensity, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
             var falloff = settings.bloomFalloff
-            encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
-            encoder.setFragmentBytes(&falloff, length: MemoryLayout<Float>.size, index: 1)
+            encoder.setFragmentBytes(&falloff, length: MemoryLayout<Float>.size, index: 2)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
 
@@ -349,8 +360,19 @@ final class Renderer: NSObject, MTKViewDelegate {
         encoder.setRenderPipelineState(prefilterPipeline)
         encoder.setFragmentTexture(source, index: 0)
         encoder.setFragmentSamplerState(sampler, index: 0)
-        var threshold = settings.bloomThreshold
-        encoder.setFragmentBytes(&threshold, length: MemoryLayout<Float>.size, index: 0)
+        var texel = SIMD2<Float>(1.0 / Float(source.width), 1.0 / Float(source.height))
+        encoder.setFragmentBytes(&texel, length: MemoryLayout<SIMD2<Float>>.stride, index: 0)
+        let linearThreshold = Renderer.gammaToLinearUnit(settings.bloomThreshold)
+        let knee = linearThreshold * 0.0 + 0.00001
+        var thresholdVec = SIMD4<Float>(
+            linearThreshold,
+            linearThreshold - knee,
+            knee * 2.0,
+            0.25 / knee
+        )
+        encoder.setFragmentBytes(&thresholdVec, length: MemoryLayout<SIMD4<Float>>.stride, index: 1)
+        var clampValue: Float = 65504.0
+        encoder.setFragmentBytes(&clampValue, length: MemoryLayout<Float>.size, index: 2)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
     }
@@ -384,6 +406,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         encoder.setFragmentSamplerState(sampler, index: 0)
         var texel = SIMD2<Float>(1.0 / Float(coarse.width), 1.0 / Float(coarse.height))
         encoder.setFragmentBytes(&texel, length: MemoryLayout<SIMD2<Float>>.stride, index: 0)
+        var sampleScale = bloomSampleScale
+        encoder.setFragmentBytes(&sampleScale, length: MemoryLayout<Float>.size, index: 1)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
     }
@@ -782,7 +806,20 @@ final class Renderer: NSObject, MTKViewDelegate {
         // Bloom is soft, so render it at half resolution to cut memory/GPU cost.
         let bloomWidth = max(1, Int(pixelSize.width * 0.5))
         let bloomHeight = max(1, Int(pixelSize.height * 0.5))
-        bloomLevelCount = max(1, settings.bloomLevels)
+
+        // Original MXFinalBloom: iterations and sampleScale come from the
+        // diffusion parameter and the starting (half-res) texture size.
+        let maxSize = Double(max(bloomWidth, bloomHeight))
+        let logSize = log2(max(maxSize, 1.0))
+        let logIterations = logSize + Double(settings.bloomDiffusion) - 10.0
+        let iterationFloor = floor(logIterations)
+        var iterations = Int(iterationFloor)
+        iterations = max(1, min(iterations, 16))
+        if settings.bloomLevels > 0 {
+            iterations = min(iterations, settings.bloomLevels)
+        }
+        bloomLevelCount = iterations
+        bloomSampleScale = Float(0.5 + logIterations - iterationFloor)
 
         if hdrSceneTexture != nil && !bloomDownTextures.isEmpty &&
             sceneSize.width == CGFloat(bloomWidth) && sceneSize.height == CGFloat(bloomHeight) {
@@ -920,6 +957,15 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private static func srgbToLinear(_ value: Float) -> Float {
         let c = min(max(value / 255.0, 0), 1)
+        if c <= 0.04045 {
+            return c / 12.92
+        }
+        return pow((c + 0.055) / 1.055, 2.4)
+    }
+
+    /// Unity's GammaToLinearSpace for a normalized [0,1] sRGB value.
+    private static func gammaToLinearUnit(_ value: Float) -> Float {
+        let c = min(max(value, 0), 1)
         if c <= 0.04045 {
             return c / 12.92
         }
