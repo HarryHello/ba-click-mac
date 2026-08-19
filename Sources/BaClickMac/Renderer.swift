@@ -55,6 +55,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let downsamplePipeline: MTLRenderPipelineState
     private let upsamplePipeline: MTLRenderPipelineState
     let bloomEnabled: Bool
+    /// BA_BLOOM_DEBUG_VIEW=1 shows only the bloom pyramid (no core), to
+    /// verify the glow itself is being generated.
+    let bloomDebugView: Bool
     var debugBloomLevels: Int { bloomLevelCount }
     var debugBloomSampleScale: Float { bloomSampleScale }
     var debugBloomIntensityFactor: Float {
@@ -108,6 +111,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         self.commandQueue = commandQueue
         // Bloom now works, default ON; disable with BA_DISABLE_BLOOM=1.
         self.bloomEnabled = getenv("BA_DISABLE_BLOOM") == nil
+        self.bloomDebugView = getenv("BA_BLOOM_DEBUG_VIEW") != nil
         self.settings = FXSettings.load()
         particleSystem.ringScale = settings.ringScale
         particleSystem.shardScale = settings.shardScale
@@ -322,14 +326,16 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         encoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
 
-        // Sharp core.
-        drawParticles(
-            disk: diskVertices,
-            ring: ringVertices,
-            triangle: triangleVertices,
-            trail: trailVertices,
-            encoder: encoder
-        )
+        // Sharp core. Skipped in BA_BLOOM_DEBUG_VIEW so only the raw glow shows.
+        if !bloomDebugView {
+            drawParticles(
+                disk: diskVertices,
+                ring: ringVertices,
+                triangle: triangleVertices,
+                trail: trailVertices,
+                encoder: encoder
+            )
+        }
 
         if bloomEnabled, let finalBloom = bloomUpTextures.first, let hdrScene = hdrSceneTexture {
             encoder.setRenderPipelineState(bloomAddPipeline)

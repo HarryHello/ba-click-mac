@@ -320,9 +320,9 @@ enum ShaderSource {
             return float4(0.0);
         }
         // Low-gamma lift: falloff < 1 raises the faint wide halo so the area
-        // around the source is visibly illuminated, not just a dark blue rim.
+        // around the source is visibly illuminated.
         float a = pow(clamp(lum, 0.0, 1.0), max(falloff, 0.35));
-        // Normalized hue, desaturated toward a pale sky/white glow.
+        // Normalized hue, desaturated toward a pale glow.
         float3 n = e / lum;
         float whiteMix = clamp(a * 1.5, 0.35, 0.9);
         n = mix(n, float3(1.0), whiteMix);
