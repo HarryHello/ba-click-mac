@@ -132,8 +132,16 @@ enum ShaderSource {
     ) {
         float4 s = tex.sample(samp, in.uv);
         float particleAlpha = clamp(in.particleAlpha, 0.0, 1.0);
-        float coverage = s.a * particleAlpha * clamp(in.coverageFactor, 0.0, 1.0);
-        float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha;
+        float coverageFactor = clamp(in.coverageFactor, 0.0, 1.0);
+
+        // Gaussian transverse profile: trail center is very bright and the
+        // edges fall off fast, like the original's linear-energy trail.
+        // uv.y spans 0..1 across the width, center = 0.5.
+        float d = (in.uv.y - 0.5) * 2.0;
+        float profile = exp(-d * d * 7.0);
+
+        float coverage = profile * particleAlpha * coverageFactor;
+        float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha * profile;
         float3 srgb = float3(linearToSrgb(emission.r), linearToSrgb(emission.g), linearToSrgb(emission.b));
         return float4(srgb * coverage, coverage);
     }
