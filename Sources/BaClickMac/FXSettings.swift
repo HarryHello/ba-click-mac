@@ -28,6 +28,9 @@ struct FXSettings: Codable {
     // Falloff exponent for the glow overlay: ~1 is near-linear like the game's
 // additive composite (bright near, smooth decay); < 1 lifts the outer halo.
     var bloomFalloff: Float = 0.9
+    // Extra brightness for the glow overlay (game additive is brighter than a
+    // premultiplied transparent overlay can be, so we compensate).
+    var bloomBoost: Float = 1.5
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()

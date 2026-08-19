@@ -347,7 +347,7 @@ final class Renderer: NSObject, MTKViewDelegate {
                 1.0 / Float(max(finalBloom.height, 1))
             )
             encoder.setFragmentBytes(&bloomTexel, length: MemoryLayout<SIMD2<Float>>.stride, index: 0)
-            let intensityFactor = Float(Foundation.exp(Double(settings.bloomStrength) / 10.0 * 0.6931471805599453) - 1.0)
+            let intensityFactor = Float(Foundation.exp(Double(settings.bloomStrength) / 10.0 * 0.6931471805599453) - 1.0) * settings.bloomBoost
             var sampleScaleAndIntensity = SIMD2<Float>(bloomSampleScale, intensityFactor)
             encoder.setFragmentBytes(&sampleScaleAndIntensity, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
             var falloff = settings.bloomFalloff

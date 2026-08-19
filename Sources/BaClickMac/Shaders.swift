@@ -322,10 +322,10 @@ enum ShaderSource {
         // Near-linear falloff: bright near the source, smooth decay, no
         // far-field fog lift (game glow is additive-linear).
         float a = pow(clamp(lum, 0.0, 1.0), max(falloff, 0.6));
-        // Keep the blue particle hue; only the very bright inner glow whitens.
+        // Lighten the deep-blue halo toward the game's bright cyan glow.
         float3 n = e / lum;
-        float whiteMix = clamp((a - 0.55) * 1.4, 0.0, 0.35);
-        n = mix(n, float3(1.0), whiteMix);
+        float3 lightCyan = float3(0.6, 0.9, 1.0);
+        n = mix(n, lightCyan, 0.45);
         // Premultiplied light color: visible contribution is n * a.
         return float4(n * a, a);
     }
