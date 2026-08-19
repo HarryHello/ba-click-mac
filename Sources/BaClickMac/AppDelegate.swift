@@ -5,8 +5,6 @@ import CoreGraphics
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
-    private var primaryWindow: NSWindow?
-    private var fullscreenPanel: NSPanel?
     private var overlayView: TransparentMTKView?
     private var mouseMonitor: MouseMonitor?
     private var renderer: Renderer?
@@ -28,33 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let frame = screen.frame
 
-        // Two-window architecture (as requested):
-        //  - primaryWindow: the original top-level overlay for the normal
-        //    desktop — covers everything, never shrinks into Mission Control,
-        //    stays on top with "Show Desktop".
-        //  - fullscreenPanel: a non-activating NSPanel (Tauri recipe) that gets
-        //    added onto the fullscreen app's Space so it overlays fullscreen
-        //    apps. Only used while a fullscreen app is active.
-        let primary = NSWindow(
-            contentRect: frame,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false,
-            screen: screen
-        )
-        primary.isOpaque = false
-        primary.backgroundColor = .clear
-        primary.hasShadow = false
-        primary.level = .screenSaver
-        primary.collectionBehavior = [
-            .canJoinAllSpaces,
-            .stationary,
-            .ignoresCycle
-        ]
-        primary.ignoresMouseEvents = true
-        primary.isReleasedWhenClosed = false
-        primaryWindow = primary
-
+        // Single persistent NSPanel (the configuration that actually works).
+        // Being a fullScreenAuxiliary panel means macOS carries it INTO the
+        // fullscreen app's Space automatically — no detection/switch needed.
+        // .stationary and .ignoresCycle are restored to keep the normal-desktop
+        // behavior as close to the original overlay as possible.
         let panel = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -69,16 +45,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
-        // Exactly the Tauri set: FullScreenAuxiliary | CanJoinAllSpaces.
         panel.collectionBehavior = [
             .canJoinAllSpaces,
-            .fullScreenAuxiliary
+            .fullScreenAuxiliary,
+            .stationary,
+            .ignoresCycle
         ]
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
-        fullscreenPanel = panel
-
-        window = primary
+        window = panel
 
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal is not supported on this Mac")
@@ -233,49 +208,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Two-window switch:
-    ///  - desktop: the Metal view lives in the top-level primaryWindow (covers
-    ///    everything, never shrinks into Mission Control, survives Show Desktop).
-    ///  - fullscreen (showInFullscreen=true): the view moves into the
-    ///    non-activating fullscreenPanel (Tauri recipe) which is added onto the
-    ///    fullscreen app's Space.
-    ///  - fullscreen (showInFullscreen=false): hide + stop rendering (no GPU
-    ///    work behind the fullscreen app).
+    /// Fullscreen handling for the single persistent NSPanel:
+    ///  - showInFullscreen=true (default): the panel is already a
+    ///    fullScreenAuxiliary member of every Space, so macOS carries it into
+    ///    the fullscreen app's Space automatically — nothing to do here.
+    ///  - showInFullscreen=false: when a fullscreen app is active, hide + stop
+    ///    rendering so no GPU work happens behind it; resume on desktop.
     private func updateFullscreenState() {
-        guard let renderer else { return }
+        guard let renderer, let overlayView else { return }
         let fullscreen = isFullscreenAppActive()
         if fullscreen == lastFullscreenState { return }
         lastFullscreenState = fullscreen
 
-        guard let overlayView else { return }
-
-        if fullscreen {
-            if renderer.settings.showInFullscreen {
-                fullscreenHidden = false
-                primaryWindow?.orderOut(nil)
-                if overlayView.window !== fullscreenPanel {
-                    fullscreenPanel?.contentView = overlayView
-                }
-                overlayView.isPaused = false
-                fullscreenPanel?.orderFrontRegardless()
-                reapplyTransparency()
-                overlayView.draw()
-            } else {
-                fullscreenHidden = true
-                primaryWindow?.orderOut(nil)
-                fullscreenPanel?.orderOut(nil)
-                overlayView.isPaused = true
-            }
+        if fullscreen && !renderer.settings.showInFullscreen {
+            fullscreenHidden = true
+            window?.orderOut(nil)
+            overlayView.isPaused = true
         } else {
             fullscreenHidden = false
-            fullscreenPanel?.orderOut(nil)
-            if overlayView.window !== primaryWindow {
-                primaryWindow?.contentView = overlayView
-            }
             overlayView.isPaused = false
-            primaryWindow?.orderFrontRegardless()
+            window?.level = .floating
+            window?.orderFrontRegardless()
             reapplyTransparency()
-            overlayView.draw()
         }
     }
 
@@ -283,7 +237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// window covering the screen (layer 0, on-screen, screen-sized bounds).
     /// Bounds/layer need no screen-recording permission (only names do).
     private func isFullscreenAppActive() -> Bool {
-        guard let screenFrame = primaryWindow?.screen?.frame else { return false }
+        guard let screenFrame = window?.screen?.frame else { return false }
         let minW = screenFrame.width * 0.97
         let minH = screenFrame.height * 0.97
         guard let list = CGWindowListCopyWindowInfo(
