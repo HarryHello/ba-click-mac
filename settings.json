@@ -2,10 +2,10 @@
   "diskScale": 1.5,
   "ringScale": 0.85,
   "shardScale": 1.0,
-  "trailScale": 1.2,
+  "trailScale": 1.4,
   "clickBloomStrength": 1.0,
   "clickBloomSigma": 14.0,
-  "trailBloomStrength": 200.0,
-  "trailBloomSigma": 100.0,
+  "trailBloomStrength": 0.3,
+  "trailBloomSigma": 2.0,
   "bloomFalloff": 2.0
 }

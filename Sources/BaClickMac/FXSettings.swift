@@ -6,13 +6,16 @@ struct FXSettings: Codable {
     var diskScale: Float = 1.5
     var ringScale: Float = 0.85
     var shardScale: Float = 1.0
-    var trailScale: Float = 1.2
+    var trailScale: Float = 1.4
     // Click (disk + rings) bloom is intentionally weaker and wider than the
     // trail bloom so the click glow doesn't over-brighten the disk.
     var clickBloomStrength: Float = 1.0
     var clickBloomSigma: Float = 14.0
-    var trailBloomStrength: Float = 1.0
-    var trailBloomSigma: Float = 6.0
+    // Trail glow is mostly carried by the Trail_03 texture (self-luminous
+    // streak); the blur bloom is only a tiny tight halo so it won't form round
+    // blobs or accumulate brightness with trail length.
+    var trailBloomStrength: Float = 0.3
+    var trailBloomSigma: Float = 2.0
     // >1 makes the glow peak brighter and fall off faster around the edges.
     var bloomFalloff: Float = 2.0
 

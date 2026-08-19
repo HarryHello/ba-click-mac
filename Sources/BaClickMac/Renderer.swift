@@ -521,11 +521,11 @@ final class Renderer: NSObject, MTKViewDelegate {
 
             // Feather/outline pass: a wider, low-alpha ribbon using the same
             // trail texture, giving the trail a soft self-luminous edge.
-            let featherOffset = normal * (halfWidth * 2.8)
-            let f0 = TexturedVertex(position: from.position + featherOffset, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: 0.20 * fromFade, coverageFactor: fromCov)
-            let f1 = TexturedVertex(position: to.position + featherOffset, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: 0.20 * toFade, coverageFactor: toCov)
-            let f2 = TexturedVertex(position: to.position - featherOffset, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: 0.20 * toFade, coverageFactor: toCov)
-            let f3 = TexturedVertex(position: from.position - featherOffset, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: 0.20 * fromFade, coverageFactor: fromCov)
+            let featherOffset = normal * (halfWidth * 3.5)
+            let f0 = TexturedVertex(position: from.position + featherOffset, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: 0.32 * fromFade, coverageFactor: fromCov)
+            let f1 = TexturedVertex(position: to.position + featherOffset, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: 0.32 * toFade, coverageFactor: toCov)
+            let f2 = TexturedVertex(position: to.position - featherOffset, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: 0.32 * toFade, coverageFactor: toCov)
+            let f3 = TexturedVertex(position: from.position - featherOffset, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: 0.32 * fromFade, coverageFactor: fromCov)
             feather.append(contentsOf: [f0, f1, f2, f0, f2, f3])
         }
     }
