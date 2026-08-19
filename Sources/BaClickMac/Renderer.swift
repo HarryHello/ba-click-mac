@@ -63,6 +63,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     var debugBloomIntensityFactor: Float {
         Float(Foundation.exp(Double(settings.bloomStrength) / 10.0 * 0.6931471805599453) - 1.0)
     }
+    /// Timestamp (CACurrentMediaTime) of the last successful draw callback.
+    /// AppDelegate's watchdog uses this to detect a stalled display link.
+    private(set) var lastDrawTime: TimeInterval = 0
 
     private let circleTexture: MTLTexture
     private let ringTexture: MTLTexture
@@ -237,6 +240,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     func draw(in view: MTKView) {
         let now = CACurrentMediaTime()
+        lastDrawTime = now
 
         // Reload settings.json every 0.5s so the user can tune live.
         if now - lastSettingsReload > 0.5 {

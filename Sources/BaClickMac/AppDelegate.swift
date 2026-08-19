@@ -1,8 +1,10 @@
 import AppKit
 import MetalKit
+import QuartzCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
+    private var overlayView: TransparentMTKView?
     private var mouseMonitor: MouseMonitor?
     private var renderer: Renderer?
     private var statusLabel: NSTextField?
@@ -55,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayView.preferredFramesPerSecond = 120
         overlayView.isPaused = false
         overlayView.enableSetNeedsDisplay = false
+        self.overlayView = overlayView
 
         let renderer = Renderer(view: overlayView)
         self.renderer = renderer
@@ -65,12 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Some macOS Spaces switches demote or hide the overlay window even
         // though it joins all spaces; re-assert ordering + transparency after
-        // every active-space change so the effect doesn't vanish.
-        self.spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.activeSpaceDidChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
+        // every active-space / screen change so the effect doesn't vanish.
+        let recover: (Notification) -> Void = { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
                 self.window?.level = .floating
@@ -78,6 +77,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.reapplyTransparency()
             }
         }
+        self.spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main,
+            using: recover
+        )
+        // Resolution/configuration changes and windows moving between
+        // screens also re-attach the layer and can stall the overlay.
+        _ = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main,
+            using: recover
+        )
+        _ = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeScreenNotification,
+            object: window,
+            queue: .main,
+            using: recover
+        )
 
         // TEMP debug HUD: show bloom/settings/particle state on the overlay.
         let label = NSTextField(labelWithString: "ba-click status")
@@ -90,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.statusLabel = label
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.updateStatus()
+            self?.checkStall()
         }
         RunLoop.main.add(timer, forMode: .common)
         self.statusTimer = timer
@@ -143,6 +163,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             view.wantsLayer = true
             view.layer?.isOpaque = false
             view.layer?.backgroundColor = NSColor.clear.cgColor
+        }
+    }
+
+    /// Watchdog: system animations (Mission Control, Spaces, full-screen
+    /// transitions) can stall the MTKView display link, leaving the last
+    /// frame frozen on screen. If no draw callback has run for >0.75s,
+    /// restart the display link and reassert the window/layer.
+    private func checkStall() {
+        guard let renderer, let overlayView else { return }
+        guard renderer.lastDrawTime > 0 else { return }
+        let now = CACurrentMediaTime()
+        if now - renderer.lastDrawTime > 0.75 {
+            overlayView.isPaused = true
+            overlayView.isPaused = false
+            window?.level = .floating
+            window?.orderFrontRegardless()
+            reapplyTransparency()
         }
     }
 
