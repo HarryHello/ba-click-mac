@@ -142,15 +142,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             using: recover
         )
 
-        // TEMP debug HUD: show bloom/settings/particle state on the overlay.
-        let label = NSTextField(labelWithString: "ba-click status")
-        label.frame = NSRect(x: 20, y: frame.height - 50, width: 800, height: 26)
-        label.isBezeled = false
-        label.drawsBackground = false
-        label.textColor = .white
-        label.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
-        overlayView.addSubview(label)
-        self.statusLabel = label
+        // Debug HUD: hidden by default; enable with BA_SHOW_HUD=1. The 0.5s
+        // housekeeping timer always runs (fullscreen state + stall watchdog);
+        // it only touches the label when the HUD is actually shown.
+        if getenv("BA_SHOW_HUD") != nil {
+            let label = NSTextField(labelWithString: "ba-click status")
+            label.frame = NSRect(x: 20, y: frame.height - 50, width: 800, height: 26)
+            label.isBezeled = false
+            label.drawsBackground = false
+            label.textColor = .white
+            label.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+            overlayView.addSubview(label)
+            self.statusLabel = label
+        }
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.updateStatus()
             self?.updateFullscreenState()
@@ -163,10 +167,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Capture global mouse events. The overlay itself ignores mouse events,
         // so we observe them system-wide and feed the effect manually.
         let monitor = MouseMonitor(screenFrame: frame)
-        monitor.onMouseDown = { [weak renderer] point in
+        monitor.onMouseDown = { [weak renderer, weak self] point in
+            // Wake the idle-stopped render loop before feeding a new effect.
+            self?.startRenderTimer()
             renderer?.particleSystem.addClick(at: point)
         }
-        monitor.onMouseMove = { [weak renderer] point in
+        monitor.onMouseMove = { [weak renderer, weak self] point in
+            self?.startRenderTimer()
             renderer?.particleSystem.addTrailPoint(at: point)
         }
         monitor.start()
@@ -180,7 +187,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Float(frame.midX),
                 Float(frame.midY)
             )
-            let loop = Timer(timeInterval: 0.9, repeats: true) { [weak renderer] _ in
+            let loop = Timer(timeInterval: 0.9, repeats: true) { [weak renderer, weak self] _ in
+                self?.startRenderTimer()
                 renderer?.particleSystem.addClick(at: center)
             }
             RunLoop.main.add(loop, forMode: .common)
@@ -211,17 +219,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Watchdog: with the manual render timer, a stall can only happen if the
-    /// main runloop was blocked (Space animation, Mission Control, etc.) or
-    /// the timer died. If no draw callback has run for >0.5s, make sure the
-    /// timer is alive, force one frame immediately and reassert the layer.
+    /// main runloop was blocked (Space animation, Mission Control, etc.). If
+    /// the timer is running but no draw callback has fired for >0.5s, force
+    /// one frame immediately and reassert the layer.
     private func checkStall() {
         guard let renderer, let overlayView else { return }
         // If we intentionally stopped rendering for a fullscreen app, that's
         // not a stall — don't wake it up to burn GPU behind the fullscreen app.
         if fullscreenHidden { return }
+        // If we intentionally stopped rendering while idle (see
+        // startRenderTimer), that's not a stall either.
+        guard renderTimer != nil else { return }
         let now = CACurrentMediaTime()
         if renderer.lastDrawTime == 0 || now - renderer.lastDrawTime > 0.5 {
-            startRenderTimer()
             overlayView.draw() // force one frame now instead of waiting a tick
             overlayView.window?.orderFrontRegardless()
             reapplyTransparency()
@@ -231,11 +241,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Start the manual 60fps render loop (idempotent). The MTKView's own
     /// display link stays paused; we call draw() ourselves so rendering never
     /// depends on AppKit's fragile display-link lifecycle.
+    ///
+    /// Power saving: the loop stops itself as soon as nothing is on screen
+    /// (idle -> zero GPU work). Clicks / mouse moves / the click-loop wake it
+    /// up again.
     private func startRenderTimer() {
         guard renderTimer == nil, let overlayView else { return }
         overlayView.isPaused = true
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            self?.overlayView?.draw()
+            guard let self else { return }
+            self.overlayView?.draw()
+            // Nothing left on screen -> stop until the next interaction.
+            if !(self.renderer?.particleSystem.hasActiveParticles() ?? false) {
+                self.stopRenderTimer()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         renderTimer = timer
