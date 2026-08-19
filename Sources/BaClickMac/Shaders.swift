@@ -125,19 +125,9 @@ enum ShaderSource {
     }
 
     // Trail: Trail_03. Emission does not get modulated by alpha.
-    // Plateau + fast Gaussian falloff: a wide bright core whose edges drop off
-    // sharply. This is the "bright trail, fast-decaying surroundings" look.
-    float trailProfile(float v) {
-        float d = abs((v - 0.5) * 2.0);
-        float plateau = 0.34;
-        if (d <= plateau) {
-            return 1.0;
-        }
-        float t = (d - plateau);
-        return exp(-t * t * 22.0);
-    }
-
-    // Window (SDR) trail: tone-mapped.
+    // Window (SDR) trail: tone-mapped. The Trail_03 texture itself carries the
+    // longitudinal fade and transverse falloff (the "stretched teardrop"), so
+    // we sample it directly — no synthetic curve overrides.
     fragment float4 trail_fragment(
         TexturedVertexOut in [[stage_in]],
         texture2d<float> tex [[texture(0)]],
@@ -146,15 +136,15 @@ enum ShaderSource {
         float4 s = tex.sample(samp, in.uv);
         float particleAlpha = clamp(in.particleAlpha, 0.0, 1.0);
         float coverageFactor = clamp(in.coverageFactor, 0.0, 1.0);
-        float profile = trailProfile(in.uv.y);
-        float coverage = profile * particleAlpha * coverageFactor;
-        float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha * profile;
+        float coverage = s.a * particleAlpha * coverageFactor;
+        float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha;
         float3 srgb = float3(linearToSrgb(emission.r), linearToSrgb(emission.g), linearToSrgb(emission.b));
         return float4(srgb * coverage, coverage);
     }
 
     // Scene trail: HDR linear output (no clamp/tonemap) so the Bloom pass gets
-    // true >1 energy for the glow, like MXFinalBloom.
+    // true >1 energy for the glow, like MXFinalBloom. Same direct sampling of
+    // the Trail_03 texture.
     fragment float4 trail_scene_fragment(
         TexturedVertexOut in [[stage_in]],
         texture2d<float> tex [[texture(0)]],
@@ -163,9 +153,8 @@ enum ShaderSource {
         float4 s = tex.sample(samp, in.uv);
         float particleAlpha = clamp(in.particleAlpha, 0.0, 1.0);
         float coverageFactor = clamp(in.coverageFactor, 0.0, 1.0);
-        float profile = trailProfile(in.uv.y);
-        float coverage = profile * particleAlpha * coverageFactor;
-        float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha * profile;
+        float coverage = s.a * particleAlpha * coverageFactor;
+        float3 emission = s.rgb * max(in.color, float3(0.0)) * particleAlpha;
         return float4(emission, coverage);
     }
 

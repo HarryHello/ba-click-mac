@@ -221,12 +221,11 @@ final class Renderer: NSObject, MTKViewDelegate {
         var ringVertices: [RingVertex] = []
         var triangleVertices: [TexturedVertex] = []
         var trailVertices: [TexturedVertex] = []
-        var trailBloomVertices: [TexturedVertex] = []
 
         appendDisks(to: &diskVertices)
         appendRings(to: &ringVertices)
         appendShards(to: &triangleVertices)
-        appendTrail(to: &trailVertices, now: now, bloom: &trailBloomVertices)
+        appendTrail(to: &trailVertices, now: now)
 
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             return
@@ -270,7 +269,7 @@ final class Renderer: NSObject, MTKViewDelegate {
                     disk: [],
                     ring: [],
                     triangle: [],
-                    trail: trailBloomVertices,
+                    trail: trailVertices,
                     encoder: encoder,
                     sceneTarget: true
                 )
@@ -292,7 +291,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         encoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
 
-        // Sharp trail core (the real bloom is added from trailBloomVertices).
+        // Sharp trail core; the real bloom is added from the same trail output.
         drawParticles(
             disk: diskVertices,
             ring: ringVertices,
@@ -450,17 +449,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
-    private func appendTrail(to vertices: inout [TexturedVertex], now: Double, bloom: inout [TexturedVertex]) {
+    private func appendTrail(to vertices: inout [TexturedVertex], now: Double) {
         let points = particleSystem.trail
         guard points.count >= 2 else { return }
         let lifetime: Double = 0.3
-
-        // For the bloom source the whole trail uses one uniform brightness that
-        // only fades after the newest point ages out (cursor stopped). This
-        // keeps the glow a continuous line instead of a bright head point.
-        let newestTime = points.last!.time
-        let overallAge = max(0, min(1, (now - newestTime) / lifetime))
-        let overallFade = Float(1 - overallAge)
 
         let totalLength = zip(points, points.dropFirst()).reduce(Float(0)) { acc, pair in
             acc + simd_distance(pair.0.position, pair.1.position)
@@ -473,10 +465,6 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
 
         let halfWidth = BAEffect.trail.width * settings.trailScale * scale * 0.5
-        // The bloom source is intentionally a thin continuous line (like the
-        // original's geometryWidth) so real Gaussian bloom produces a wide glow
-        // along the line instead of round blobs.
-        let bloomHalfWidth = BAEffect.trail.geometryWidth * scale * 0.5
         let materialIntensity: Float = 23.968628
 
         for i in 1..<points.count {
@@ -488,6 +476,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
             let tangent = delta / length
             let normal = SIMD2(-tangent.y, tangent.x)
+            let offset = normal * halfWidth
 
             let fromProgress = distances[i - 1] / totalLength
             let toProgress = distances[i] / totalLength
@@ -516,26 +505,15 @@ final class Renderer: NSObject, MTKViewDelegate {
             let uFrom = 1 - fromProgress
             let uTo = 1 - toProgress
 
-            // Core ribbon (full displayed width).
-            let coreOffset = normal * halfWidth
-            let fromLeft = from.position + coreOffset
-            let fromRight = from.position - coreOffset
-            let toLeft = to.position + coreOffset
-            let toRight = to.position - coreOffset
+            let fromLeft = from.position + offset
+            let fromRight = from.position - offset
+            let toLeft = to.position + offset
+            let toRight = to.position - offset
             let v0 = TexturedVertex(position: fromLeft, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: fromAlpha, coverageFactor: fromCov)
             let v1 = TexturedVertex(position: toLeft, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: toAlpha, coverageFactor: toCov)
             let v2 = TexturedVertex(position: toRight, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: toAlpha, coverageFactor: toCov)
             let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: fromAlpha, coverageFactor: fromCov)
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
-
-            // Thin, uniform-emission line for the real bloom pass. The whole
-            // line is equally bright (overallFade) so blur yields a glow line.
-            let bloomOffset = normal * bloomHalfWidth
-            let b0 = TexturedVertex(position: from.position + bloomOffset, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: overallFade, coverageFactor: 1)
-            let b1 = TexturedVertex(position: to.position + bloomOffset, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: overallFade, coverageFactor: 1)
-            let b2 = TexturedVertex(position: to.position - bloomOffset, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: overallFade, coverageFactor: 1)
-            let b3 = TexturedVertex(position: from.position - bloomOffset, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: overallFade, coverageFactor: 1)
-            bloom.append(contentsOf: [b0, b1, b2, b0, b2, b3])
         }
     }
 
