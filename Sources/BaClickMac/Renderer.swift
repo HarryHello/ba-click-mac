@@ -221,11 +221,12 @@ final class Renderer: NSObject, MTKViewDelegate {
         var triangleVertices: [TexturedVertex] = []
         var trailVertices: [TexturedVertex] = []
         var trailGlowVertices: [TexturedVertex] = []
+        var trailGlowCaps: [TexturedVertex] = []
 
         appendDisks(to: &diskVertices)
         appendRings(to: &ringVertices)
         appendShards(to: &triangleVertices)
-        appendTrail(to: &trailVertices, glow: &trailGlowVertices, now: now)
+        appendTrail(to: &trailVertices, glow: &trailGlowVertices, caps: &trailGlowCaps, now: now)
 
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             return
@@ -293,6 +294,11 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         // Wide, soft glow stack first, then the sharp trail core on top.
         drawTextured(vertices: trailGlowVertices, texture: trailTexture, pipeline: trailPipeline, encoder: encoder)
+        if !trailGlowCaps.isEmpty {
+            var capEmission: Float = 1.0
+            encoder.setFragmentBytes(&capEmission, length: MemoryLayout<Float>.size, index: 2)
+            drawTextured(vertices: trailGlowCaps, texture: circleTexture, pipeline: diskPipeline, encoder: encoder)
+        }
 
         drawParticles(
             disk: diskVertices,
@@ -451,7 +457,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
-    private func appendTrail(to vertices: inout [TexturedVertex], glow: inout [TexturedVertex], now: Double) {
+    private func appendTrail(to vertices: inout [TexturedVertex], glow: inout [TexturedVertex], caps: inout [TexturedVertex], now: Double) {
         let points = particleSystem.trail
         guard points.count >= 2 else { return }
         let lifetime: Double = 0.3
@@ -519,10 +525,15 @@ final class Renderer: NSObject, MTKViewDelegate {
 
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
 
-            // Multi-layer glow stack: wide, very soft passes of the same trail
-            // texture so the glow spreads naturally along the line instead of
-            // forming a hard outline or a round blob.
-            let glowLayers: [(Float, Float)] = [(2.5, 0.18), (4.5, 0.09), (7.0, 0.05), (10.0, 0.03)]
+            // Multi-layer glow stack: wide, bright, very soft passes of the same
+            // trail texture so the glow spreads naturally along the line.
+            let glowLayers: [(Float, Float)] = [
+                (2.5, 0.30),
+                (5.0, 0.16),
+                (8.0, 0.10),
+                (12.0, 0.06),
+                (16.0, 0.04)
+            ]
             for (widthMultiplier, alpha) in glowLayers {
                 let glowOffset = normal * (halfWidth * widthMultiplier)
                 let g0 = TexturedVertex(position: from.position + glowOffset, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: alpha * fromFade, coverageFactor: fromCov)
@@ -530,6 +541,32 @@ final class Renderer: NSObject, MTKViewDelegate {
                 let g2 = TexturedVertex(position: to.position - glowOffset, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: alpha * toFade, coverageFactor: toCov)
                 let g3 = TexturedVertex(position: from.position - glowOffset, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: alpha * fromFade, coverageFactor: fromCov)
                 glow.append(contentsOf: [g0, g1, g2, g0, g2, g3])
+
+                // Round soft caps at each endpoint so corners and line ends
+                // don't leave gaps in the glow.
+                let capSize = halfWidth * 2 * widthMultiplier
+                appendTexturedSprite(
+                    center: from.position,
+                    size: capSize,
+                    angle: 0,
+                    uvMin: SIMD2(0, 0),
+                    uvMax: SIMD2(1, 1),
+                    color: fromColor,
+                    particleAlpha: alpha * fromFade,
+                    coverageFactor: fromCov,
+                    to: &caps
+                )
+                appendTexturedSprite(
+                    center: to.position,
+                    size: capSize,
+                    angle: 0,
+                    uvMin: SIMD2(0, 0),
+                    uvMax: SIMD2(1, 1),
+                    color: toColor,
+                    particleAlpha: alpha * toFade,
+                    coverageFactor: toCov,
+                    to: &caps
+                )
             }
         }
     }
