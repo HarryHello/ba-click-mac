@@ -51,6 +51,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let trianglePipeline: MTLRenderPipelineState
     private let compositePipeline: MTLRenderPipelineState
     private let bloomAddPipeline: MTLRenderPipelineState
+    private let prefilterPipeline: MTLRenderPipelineState
+    private let downsamplePipeline: MTLRenderPipelineState
+    private let upsamplePipeline: MTLRenderPipelineState
     let bloomEnabled: Bool
 
     private let circleTexture: MTLTexture
@@ -58,17 +61,14 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let triangleTexture: MTLTexture
     private let trailTexture: MTLTexture
 
-    private var clickSceneTexture: MTLTexture?
-    private var clickBloomTexture: MTLTexture?
-    private var trailSceneTexture: MTLTexture?
-    private var trailBloomTexture: MTLTexture?
-    private var clickBlurFilter: MPSImageGaussianBlur?
-    private var trailBlurFilter: MPSImageGaussianBlur?
+    private var hdrSceneTexture: MTLTexture?
+    private var bloomDownTextures: [MTLTexture] = []
+    private var bloomUpTextures: [MTLTexture] = []
+    private var bloomLevelSizes: [CGSize] = []
+    private let bloomLevelCount = 4
     private var sceneSize: CGSize = .zero
     private(set) var settings: FXSettings
     private var lastSettingsReload: TimeInterval = 0
-    private var currentClickSigma: Float = 0
-    private var currentTrailSigma: Float = 0
 
     private var viewportSize = SIMD2<Float>(1, 1)
     private var scale: Float = 1
@@ -84,6 +84,11 @@ final class Renderer: NSObject, MTKViewDelegate {
               let triangleFragment = library.makeFunction(name: "triangle_fragment"),
               let trailFragment = library.makeFunction(name: "trail_fragment"),
               let trailSceneFragment = library.makeFunction(name: "trail_scene_fragment"),
+              let diskSceneFragment = library.makeFunction(name: "disk_scene_fragment"),
+              let ringSceneFragment = library.makeFunction(name: "ring_scene_fragment"),
+              let prefilterFragment = library.makeFunction(name: "prefilter_fragment"),
+              let downsampleFragment = library.makeFunction(name: "downsample_fragment"),
+              let upsampleFragment = library.makeFunction(name: "upsample_fragment"),
               let fullscreenVertex = library.makeFunction(name: "fullscreen_vertex"),
               let compositeFragment = library.makeFunction(name: "composite_fragment"),
               let bloomAddFragment = library.makeFunction(name: "bloom_add_fragment") else {
@@ -126,13 +131,13 @@ final class Renderer: NSObject, MTKViewDelegate {
             self.sceneDiskPipeline = try Renderer.makePipeline(
                 device: device,
                 vertexFunction: texturedVertex,
-                fragmentFunction: diskFragment,
+                fragmentFunction: diskSceneFragment,
                 pixelFormat: .rgba16Float
             )
             self.sceneRingPipeline = try Renderer.makePipeline(
                 device: device,
                 vertexFunction: ringVertex,
-                fragmentFunction: ringFragment,
+                fragmentFunction: ringSceneFragment,
                 pixelFormat: .rgba16Float
             )
             self.sceneTrailPipeline = try Renderer.makePipeline(
@@ -179,6 +184,24 @@ final class Renderer: NSObject, MTKViewDelegate {
                 fragmentFunction: bloomAddFragment,
                 pixelFormat: view.colorPixelFormat
             )
+            self.prefilterPipeline = try Renderer.makePipeline(
+                device: device,
+                vertexFunction: fullscreenVertex,
+                fragmentFunction: prefilterFragment,
+                pixelFormat: .rgba16Float
+            )
+            self.downsamplePipeline = try Renderer.makePipeline(
+                device: device,
+                vertexFunction: fullscreenVertex,
+                fragmentFunction: downsampleFragment,
+                pixelFormat: .rgba16Float
+            )
+            self.upsamplePipeline = try Renderer.makePipeline(
+                device: device,
+                vertexFunction: fullscreenVertex,
+                fragmentFunction: upsampleFragment,
+                pixelFormat: .rgba16Float
+            )
         } catch {
             return nil
         }
@@ -204,14 +227,6 @@ final class Renderer: NSObject, MTKViewDelegate {
             settings = FXSettings.load()
             particleSystem.ringScale = settings.ringScale
             particleSystem.shardScale = settings.shardScale
-            if settings.clickBloomSigma != currentClickSigma {
-                currentClickSigma = settings.clickBloomSigma
-                clickBlurFilter = MPSImageGaussianBlur(device: device, sigma: settings.clickBloomSigma)
-            }
-            if settings.trailBloomSigma != currentTrailSigma {
-                currentTrailSigma = settings.trailBloomSigma
-                trailBlurFilter = MPSImageGaussianBlur(device: device, sigma: settings.trailBloomSigma)
-            }
             lastSettingsReload = now
         }
 
@@ -231,43 +246,20 @@ final class Renderer: NSObject, MTKViewDelegate {
             return
         }
 
-        // 1) Render click bloom (disk+rings) and trail bloom separately so they
-        //    can use independent strength/sigma settings.
+        // 1) MXFinalBloom-style multi-level bloom on a single HDR scene.
         if bloomEnabled,
-           let clickScene = clickSceneTexture,
-           let clickBloom = clickBloomTexture,
-           let clickBlur = clickBlurFilter,
-           let trailScene = trailSceneTexture,
-           let trailBloom = trailBloomTexture,
-           let trailBlur = trailBlurFilter {
-
-            let clickPass = MTLRenderPassDescriptor()
-            clickPass.colorAttachments[0].texture = clickScene
-            clickPass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-            clickPass.colorAttachments[0].loadAction = .clear
-            clickPass.colorAttachments[0].storeAction = .store
-            if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: clickPass) {
+           let hdr = hdrSceneTexture,
+           !bloomDownTextures.isEmpty,
+           !bloomUpTextures.isEmpty {
+            let scenePass = MTLRenderPassDescriptor()
+            scenePass.colorAttachments[0].texture = hdr
+            scenePass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            scenePass.colorAttachments[0].loadAction = .clear
+            scenePass.colorAttachments[0].storeAction = .store
+            if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: scenePass) {
                 drawParticles(
                     disk: diskVertices,
                     ring: ringVertices,
-                    triangle: [],
-                    trail: [],
-                    encoder: encoder,
-                    sceneTarget: true
-                )
-                encoder.endEncoding()
-            }
-            clickBlur.encode(commandBuffer: commandBuffer, sourceTexture: clickScene, destinationTexture: clickBloom)
-
-            let trailPass = MTLRenderPassDescriptor()
-            trailPass.colorAttachments[0].texture = trailScene
-            trailPass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-            trailPass.colorAttachments[0].loadAction = .clear
-            trailPass.colorAttachments[0].storeAction = .store
-            if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: trailPass) {
-                drawParticles(
-                    disk: [],
-                    ring: [],
                     triangle: [],
                     trail: trailVertices,
                     encoder: encoder,
@@ -275,11 +267,31 @@ final class Renderer: NSObject, MTKViewDelegate {
                 )
                 encoder.endEncoding()
             }
-            trailBlur.encode(commandBuffer: commandBuffer, sourceTexture: trailScene, destinationTexture: trailBloom)
+
+            // Prefilter bright energy, downsample, upsample.
+            renderPrefilter(source: hdr, dest: bloomDownTextures[0], commandBuffer: commandBuffer)
+            for i in 1..<bloomLevelCount {
+                renderDownsample(source: bloomDownTextures[i - 1], dest: bloomDownTextures[i], commandBuffer: commandBuffer)
+            }
+            let last = bloomLevelCount - 1
+            if let blit = commandBuffer.makeBlitCommandEncoder() {
+                blit.copy(from: bloomDownTextures[last], to: bloomUpTextures[last])
+                blit.endEncoding()
+            }
+            if bloomLevelCount >= 2 {
+                for i in stride(from: bloomLevelCount - 2, through: 0, by: -1) {
+                    renderUpsample(
+                        coarse: bloomUpTextures[i + 1],
+                        fine: bloomDownTextures[i],
+                        dest: bloomUpTextures[i],
+                        commandBuffer: commandBuffer
+                    )
+                }
+            }
         }
 
         // 2) Always draw the core effect directly to the window, then add the
-        //    blurred blooms on top.
+        //    final bloom pyramid on top.
         guard let renderPassDescriptor = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
@@ -291,7 +303,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         encoder.setVertexBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
 
-        // Sharp trail core; the real bloom is added from the same trail output.
+        // Sharp core.
         drawParticles(
             disk: diskVertices,
             ring: ringVertices,
@@ -300,25 +312,12 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder: encoder
         )
 
-        if bloomEnabled, let clickBloom = clickBloomTexture, let trailBloom = trailBloomTexture {
+        if bloomEnabled, let finalBloom = bloomUpTextures.first {
             encoder.setRenderPipelineState(bloomAddPipeline)
-            encoder.setFragmentTexture(clickBloom, index: 0)
+            encoder.setFragmentTexture(finalBloom, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
-            var strength = settings.clickBloomStrength
+            var strength = settings.bloomStrength
             var falloff = settings.bloomFalloff
-            encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
-            encoder.setFragmentBytes(&falloff, length: MemoryLayout<Float>.size, index: 1)
-            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-
-            encoder.setRenderPipelineState(bloomAddPipeline)
-            encoder.setFragmentTexture(trailBloom, index: 0)
-            encoder.setFragmentSamplerState(sampler, index: 0)
-            // Normalize by trail length so a long/fast trail is not brighter
-            // than a short/slow one (self-luminous trail brightness).
-            let trailLength = computeTrailLength()
-            let lengthFactor = min(1.0, 300.0 / max(trailLength, 1.0))
-            strength = settings.trailBloomStrength * lengthFactor
-            falloff = settings.bloomFalloff
             encoder.setFragmentBytes(&strength, length: MemoryLayout<Float>.size, index: 0)
             encoder.setFragmentBytes(&falloff, length: MemoryLayout<Float>.size, index: 1)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
@@ -328,6 +327,55 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         commandBuffer.present(drawable)
         commandBuffer.commit()
+    }
+
+    private func renderPrefilter(source: MTLTexture, dest: MTLTexture, commandBuffer: MTLCommandBuffer) {
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = dest
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return }
+        encoder.setRenderPipelineState(prefilterPipeline)
+        encoder.setFragmentTexture(source, index: 0)
+        encoder.setFragmentSamplerState(sampler, index: 0)
+        var threshold: Float = 1.0
+        encoder.setFragmentBytes(&threshold, length: MemoryLayout<Float>.size, index: 0)
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        encoder.endEncoding()
+    }
+
+    private func renderDownsample(source: MTLTexture, dest: MTLTexture, commandBuffer: MTLCommandBuffer) {
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = dest
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return }
+        encoder.setRenderPipelineState(downsamplePipeline)
+        encoder.setFragmentTexture(source, index: 0)
+        encoder.setFragmentSamplerState(sampler, index: 0)
+        var texel = SIMD2<Float>(1.0 / Float(source.width), 1.0 / Float(source.height))
+        encoder.setFragmentBytes(&texel, length: MemoryLayout<SIMD2<Float>>.stride, index: 0)
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        encoder.endEncoding()
+    }
+
+    private func renderUpsample(coarse: MTLTexture, fine: MTLTexture, dest: MTLTexture, commandBuffer: MTLCommandBuffer) {
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = dest
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return }
+        encoder.setRenderPipelineState(upsamplePipeline)
+        encoder.setFragmentTexture(coarse, index: 0)
+        encoder.setFragmentTexture(fine, index: 1)
+        encoder.setFragmentSamplerState(sampler, index: 0)
+        var texel = SIMD2<Float>(1.0 / Float(coarse.width), 1.0 / Float(coarse.height))
+        encoder.setFragmentBytes(&texel, length: MemoryLayout<SIMD2<Float>>.stride, index: 0)
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        encoder.endEncoding()
     }
 
     private func drawParticles(
@@ -719,8 +767,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         let bloomWidth = max(1, Int(pixelSize.width * 0.5))
         let bloomHeight = max(1, Int(pixelSize.height * 0.5))
 
-        if clickSceneTexture != nil && clickBloomTexture != nil &&
-            trailSceneTexture != nil && trailBloomTexture != nil &&
+        if hdrSceneTexture != nil && !bloomDownTextures.isEmpty &&
             sceneSize.width == CGFloat(bloomWidth) && sceneSize.height == CGFloat(bloomHeight) {
             return
         }
@@ -733,14 +780,27 @@ final class Renderer: NSObject, MTKViewDelegate {
             mipmapped: false
         )
         descriptor.usage = [.renderTarget, .shaderRead, .shaderWrite]
-        clickSceneTexture = device.makeTexture(descriptor: descriptor)
-        clickBloomTexture = device.makeTexture(descriptor: descriptor)
-        trailSceneTexture = device.makeTexture(descriptor: descriptor)
-        trailBloomTexture = device.makeTexture(descriptor: descriptor)
-        currentClickSigma = settings.clickBloomSigma
-        currentTrailSigma = settings.trailBloomSigma
-        clickBlurFilter = MPSImageGaussianBlur(device: device, sigma: settings.clickBloomSigma)
-        trailBlurFilter = MPSImageGaussianBlur(device: device, sigma: settings.trailBloomSigma)
+        hdrSceneTexture = device.makeTexture(descriptor: descriptor)
+
+        bloomDownTextures.removeAll()
+        bloomUpTextures.removeAll()
+        bloomLevelSizes.removeAll()
+        var w = bloomWidth
+        var h = bloomHeight
+        for _ in 0..<bloomLevelCount {
+            let levelDesc = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rgba16Float,
+                width: w,
+                height: h,
+                mipmapped: false
+            )
+            levelDesc.usage = [.renderTarget, .shaderRead, .shaderWrite]
+            bloomDownTextures.append(device.makeTexture(descriptor: levelDesc)!)
+            bloomUpTextures.append(device.makeTexture(descriptor: levelDesc)!)
+            bloomLevelSizes.append(CGSize(width: w, height: h))
+            w = max(1, w / 2)
+            h = max(1, h / 2)
+        }
     }
 
     // MARK: - Helpers

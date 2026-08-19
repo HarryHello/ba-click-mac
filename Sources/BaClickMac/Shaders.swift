@@ -110,6 +110,37 @@ enum ShaderSource {
         return float4(srgb * alpha, alpha);
     }
 
+    // HDR scene disk: unclamped linear emission for MXFinalBloom.
+    fragment float4 disk_scene_fragment(
+        TexturedVertexOut in [[stage_in]],
+        texture2d<float> tex [[texture(0)]],
+        sampler samp [[sampler(0)]],
+        constant float &emissionScale [[buffer(2)]]
+    ) {
+        float4 s = tex.sample(samp, in.uv);
+        float textureAlpha = s.r;
+        float3 emission = s.rgb * max(in.color, float3(0.0)) * textureAlpha * max(emissionScale, 0.0);
+        float alpha = textureAlpha * clamp(in.particleAlpha, 0.0, 1.0);
+        return float4(emission, alpha);
+    }
+
+    // HDR scene ring: unclamped linear emission for MXFinalBloom.
+    fragment float4 ring_scene_fragment(
+        RingVertexOut in [[stage_in]],
+        texture2d<float> tex [[texture(0)]],
+        sampler samp [[sampler(0)]],
+        constant float &emissionScale [[buffer(2)]]
+    ) {
+        float textureAlpha = tex.sample(samp, in.uv).r;
+        if (textureAlpha < in.dissolveThreshold) {
+            discard_fragment();
+        }
+        textureAlpha = clamp(textureAlpha, 0.0, 1.0);
+        float3 emission = max(in.color, float3(0.0)) * max(emissionScale, 0.0) * textureAlpha;
+        float alpha = textureAlpha * clamp(in.coverageOpacity, 0.0, 1.0);
+        return float4(emission, alpha);
+    }
+
     // Shards: Triangle_02_1. Alpha modulates emission.
     fragment float4 triangle_fragment(
         TexturedVertexOut in [[stage_in]],
@@ -193,6 +224,57 @@ enum ShaderSource {
         float maxColor = max(max(color.r, color.g), color.b);
         float alpha = clamp(max(s.a, maxColor), 0.0, 1.0);
         return float4(color * alpha, alpha);
+    }
+
+    float2 flipUV(float2 uv) {
+        return float2(uv.x, 1.0 - uv.y);
+    }
+
+    // MXFinalBloom prefilter: keep only energy above the threshold.
+    fragment float4 prefilter_fragment(
+        FullscreenOut in [[stage_in]],
+        texture2d<float> src [[texture(0)]],
+        sampler samp [[sampler(0)]],
+        constant float &threshold [[buffer(0)]]
+    ) {
+        float4 c = src.sample(samp, flipUV(in.uv));
+        float l = max(max(c.r, c.g), c.b);
+        float contribution = max(l - max(threshold, 0.0), 0.0);
+        if (contribution <= 0.0) {
+            return float4(0.0);
+        }
+        return float4(c.rgb * contribution / max(l, 0.00001), contribution);
+    }
+
+    fragment float4 downsample_fragment(
+        FullscreenOut in [[stage_in]],
+        texture2d<float> src [[texture(0)]],
+        sampler samp [[sampler(0)]],
+        constant float2 &texel [[buffer(0)]]
+    ) {
+        float2 uv = flipUV(in.uv);
+        float4 sum =
+            src.sample(samp, uv + texel * float2(-0.5, -0.5)) +
+            src.sample(samp, uv + texel * float2(0.5, -0.5)) +
+            src.sample(samp, uv + texel * float2(-0.5, 0.5)) +
+            src.sample(samp, uv + texel * float2(0.5, 0.5));
+        return sum * 0.25;
+    }
+
+    fragment float4 upsample_fragment(
+        FullscreenOut in [[stage_in]],
+        texture2d<float> coarse [[texture(0)]],
+        texture2d<float> fine [[texture(1)]],
+        sampler samp [[sampler(0)]],
+        constant float2 &coarseTexel [[buffer(0)]]
+    ) {
+        float2 uv = flipUV(in.uv);
+        float4 acc =
+            coarse.sample(samp, uv + coarseTexel * float2(-0.5, -0.5)) +
+            coarse.sample(samp, uv + coarseTexel * float2(0.5, -0.5)) +
+            coarse.sample(samp, uv + coarseTexel * float2(-0.5, 0.5)) +
+            coarse.sample(samp, uv + coarseTexel * float2(0.5, 0.5));
+        return acc * 0.25 + fine.sample(samp, uv);
     }
 
     // Bloom overlay: adds blurred scene light AND alpha so the halo extends
