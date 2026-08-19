@@ -111,10 +111,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let renderer, let label = statusLabel else { return }
         let s = renderer.settings
         label.stringValue = String(
-            format: "bloom=%@ strength=%.2f levels=%d falloff=%.1f bursts=%d shards=%d trail=%d",
+            format: "bloom=%@ I=%.2f(->%.3f) levels=%d scale=%.3f diff=%.1f th=%.2f falloff=%.1f bursts=%d shards=%d trail=%d",
             renderer.bloomEnabled ? "ON" : "OFF",
             s.bloomStrength,
-            s.bloomLevels,
+            renderer.debugBloomIntensityFactor,
+            renderer.debugBloomLevels,
+            renderer.debugBloomSampleScale,
+            s.bloomDiffusion,
+            s.bloomThreshold,
             s.bloomFalloff,
             renderer.particleSystem.bursts.count,
             renderer.particleSystem.shards.count,

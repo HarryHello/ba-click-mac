@@ -55,6 +55,11 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let downsamplePipeline: MTLRenderPipelineState
     private let upsamplePipeline: MTLRenderPipelineState
     let bloomEnabled: Bool
+    var debugBloomLevels: Int { bloomLevelCount }
+    var debugBloomSampleScale: Float { bloomSampleScale }
+    var debugBloomIntensityFactor: Float {
+        Float(Foundation.exp(Double(settings.bloomStrength) / 10.0 * 0.6931471805599453) - 1.0)
+    }
 
     private let circleTexture: MTLTexture
     private let ringTexture: MTLTexture
