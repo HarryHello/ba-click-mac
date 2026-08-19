@@ -32,9 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
-        // Floating keeps the overlay above normal app windows but below the
-        // macOS menu bar, Force Quit dialog, and other system UI.
-        window.level = .floating
+        // screenSaver level so the overlay also appears above fullscreen apps.
+        // The window is click-through (ignoresMouseEvents), so this never
+        // blocks clicks or system UI.
+        window.level = .screenSaver
         window.collectionBehavior = [
             .canJoinAllSpaces,
             .stationary,
@@ -72,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let recover: (Notification) -> Void = { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
-                self.window?.level = .floating
+                self.window?.level = .screenSaver
                 self.window?.orderFrontRegardless()
                 self.reapplyTransparency()
             }
@@ -117,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         label.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
         overlayView.addSubview(label)
         self.statusLabel = label
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
             self?.updateStatus()
             self?.checkStall()
         }
@@ -178,16 +179,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Watchdog: system animations (Mission Control, Spaces, full-screen
     /// transitions) can stall the MTKView display link, leaving the last
-    /// frame frozen on screen. If no draw callback has run for >0.75s,
-    /// restart the display link and reassert the window/layer.
+    /// frame frozen on screen. If no draw callback has run for >0.5s, restart
+    /// the display link, force an immediate frame and reassert the layer.
     private func checkStall() {
         guard let renderer, let overlayView else { return }
         guard renderer.lastDrawTime > 0 else { return }
         let now = CACurrentMediaTime()
-        if now - renderer.lastDrawTime > 0.75 {
+        if now - renderer.lastDrawTime > 0.5 {
             overlayView.isPaused = true
             overlayView.isPaused = false
-            window?.level = .floating
+            overlayView.draw() // force one frame now instead of waiting a tick
+            window?.level = .screenSaver
             window?.orderFrontRegardless()
             reapplyTransparency()
         }
