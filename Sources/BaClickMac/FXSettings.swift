@@ -25,12 +25,11 @@ struct FXSettings: Codable {
     // Original MXFinalBloom prefilter threshold (in gamma space; shader converts
     // to linear). Game value is 1.0.
     var bloomThreshold: Float = 1.0
-    // Falloff exponent for the glow overlay: ~1 is near-linear like the game's
-// additive composite (bright near, smooth decay); < 1 lifts the outer halo.
-    var bloomFalloff: Float = 0.9
-    // Extra brightness for the glow overlay; keep small so the halo stays
-    // translucent and follows the trail instead of forming a solid blob.
-    var bloomBoost: Float = 1.6
+    // Rational falloff knee for the glow overlay: a = lum/(lum+k). Smaller k lifts
+// the faint mid/far halo (overall brighter) while the core stays narrow.
+    var bloomFalloff: Float = 0.35
+    // Extra brightness for the glow overlay.
+    var bloomBoost: Float = 1.2
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()

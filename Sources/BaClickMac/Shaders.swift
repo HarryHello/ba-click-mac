@@ -324,10 +324,10 @@ enum ShaderSource {
         if (lum <= 0.001) {
             return float4(0.0);
         }
-        // Near-linear falloff: bright near the source, smooth decay, no
-        // far-field fog lift (game glow is additive-linear). Cap so the halo
-        // stays translucent and hugs the trail instead of forming a solid blob.
-        float a = min(0.8, pow(clamp(lum, 0.0, 1.0), max(falloff, 0.6)));
+        // Point-source falloff: a = lum/(lum+k). Lifts the faint mid/far halo
+        // so the overall glow is visible, stays smooth toward a bright but
+        // narrow core (no flat filled blob), ~1/r^2-like.
+        float a = clamp(lum / (lum + max(falloff, 0.05)), 0.0, 1.0);
         // Lighten the deep-blue halo toward the game's bright cyan glow.
         float3 n = e / lum;
         float3 lightCyan = float3(0.6, 0.9, 1.0);
