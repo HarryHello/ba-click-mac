@@ -7,14 +7,12 @@ struct FXSettings: Codable {
     var ringScale: Float = 0.85
     var shardScale: Float = 1.0
     var trailScale: Float = 1.4
-    // Click (disk + rings) bloom is intentionally weaker and wider than the
-    // trail bloom so the click glow doesn't over-brighten the disk.
-    var clickBloomStrength: Float = 0.25
+    // Click (disk + rings) HDR glow-source energy multiplier. This is what
+    // feeds the bloom pyramid; keep it >= 1 or the click glow vanishes.
+    var clickBloomStrength: Float = 1.5
     var clickBloomSigma: Float = 14.0
-    // Trail glow is mostly carried by the Trail_03 texture (self-luminous
-    // streak); the blur bloom is only a tiny tight halo so it won't form round
-    // blobs or accumulate brightness with trail length.
-    var trailBloomStrength: Float = 1.5
+    // Trail HDR glow-source energy multiplier for the bloom pyramid.
+    var trailBloomStrength: Float = 3.0
     var trailBloomSigma: Float = 8.0
     // Unified MXFinalBloom intensity used by the multi-level bloom path.
     var bloomStrength: Float = 1.0
@@ -23,8 +21,8 @@ struct FXSettings: Codable {
     // Prefilter threshold: lower catches weak HDR energy so the outer glow is
     // visible instead of only the brightest core.
     var bloomThreshold: Float = 0.05
-    // >1 makes the glow peak brighter and fall off faster around the edges.
-    var bloomFalloff: Float = 1.5
+    // 1.0 = filmic falloff; < 1 widens the halo, > 1 tightens it.
+    var bloomFalloff: Float = 1.0
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()
