@@ -49,7 +49,6 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let ringPipeline: MTLRenderPipelineState
     private let trailPipeline: MTLRenderPipelineState
     private let trianglePipeline: MTLRenderPipelineState
-    private let compositePipeline: MTLRenderPipelineState
     private let bloomAddPipeline: MTLRenderPipelineState
     private let prefilterPipeline: MTLRenderPipelineState
     private let downsamplePipeline: MTLRenderPipelineState
@@ -75,24 +74,36 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var hdrSceneTexture: MTLTexture?
     private var bloomDownTextures: [MTLTexture] = []
     private var bloomUpTextures: [MTLTexture] = []
-    private var bloomLevelSizes: [CGSize] = []
     private var bloomLevelCount: Int = 4
     private var bloomSampleScale: Float = 1.0
     private var lastBloomLevels: Int = 16
     private var lastBloomDiffusion: Float = 7.0
     private var sceneSize: CGSize = .zero
+    // Reused render pass descriptors (set per pass every frame) to avoid
+    // per-frame allocation churn.
+    private let scenePassDescriptor = MTLRenderPassDescriptor()
+    private let prefilterPassDescriptor = MTLRenderPassDescriptor()
+    private let downsamplePassDescriptor = MTLRenderPassDescriptor()
+    private let upsamplePassDescriptor = MTLRenderPassDescriptor()
     private weak var currentView: MTKView?
     private(set) var settings: FXSettings
     private var lastSettingsReload: TimeInterval = 0
+    private static let settingsReloadInterval: TimeInterval = 0.5
 
     private var viewportSize = SIMD2<Float>(1, 1)
     private var scale: Float = 1
 
     init?(view: MTKView) {
         guard let device = MTLCreateSystemDefaultDevice(),
-              let commandQueue = device.makeCommandQueue(),
-              let library = try? device.makeLibrary(source: ShaderSource.source, options: nil),
-              let texturedVertex = library.makeFunction(name: "textured_vertex"),
+              let commandQueue = device.makeCommandQueue() else {
+            dlog("[renderer] failed to create Metal device or command queue")
+            return nil
+        }
+        guard let library = try? device.makeLibrary(source: ShaderSource.source, options: nil) else {
+            dlog("[renderer] FAILED to compile Metal shaders")
+            return nil
+        }
+        guard let texturedVertex = library.makeFunction(name: "textured_vertex"),
               let ringVertex = library.makeFunction(name: "ring_vertex"),
               let diskFragment = library.makeFunction(name: "disk_fragment"),
               let ringFragment = library.makeFunction(name: "ring_fragment"),
@@ -105,7 +116,6 @@ final class Renderer: NSObject, MTKViewDelegate {
               let downsampleFragment = library.makeFunction(name: "downsample_fragment"),
               let upsampleFragment = library.makeFunction(name: "upsample_fragment"),
               let fullscreenVertex = library.makeFunction(name: "fullscreen_vertex"),
-              let compositeFragment = library.makeFunction(name: "composite_fragment"),
               let bloomAddFragment = library.makeFunction(name: "bloom_add_fragment") else {
             return nil
         }
@@ -190,12 +200,6 @@ final class Renderer: NSObject, MTKViewDelegate {
                 fragmentFunction: triangleFragment,
                 pixelFormat: view.colorPixelFormat
             )
-            self.compositePipeline = try Renderer.makePipeline(
-                device: device,
-                vertexFunction: fullscreenVertex,
-                fragmentFunction: compositeFragment,
-                pixelFormat: view.colorPixelFormat
-            )
             self.bloomAddPipeline = try Renderer.makeAdditivePipeline(
                 device: device,
                 vertexFunction: fullscreenVertex,
@@ -243,7 +247,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         lastDrawTime = now
 
         // Reload settings.json every 0.5s so the user can tune live.
-        if now - lastSettingsReload > 0.5 {
+        if now - lastSettingsReload > Renderer.settingsReloadInterval {
             settings = FXSettings.load()
             particleSystem.ringScale = settings.ringScale
             particleSystem.shardScale = settings.shardScale
@@ -284,7 +288,7 @@ final class Renderer: NSObject, MTKViewDelegate {
            let hdr = hdrSceneTexture,
            !bloomDownTextures.isEmpty,
            !bloomUpTextures.isEmpty {
-            let scenePass = MTLRenderPassDescriptor()
+            let scenePass = scenePassDescriptor
             scenePass.colorAttachments[0].texture = hdr
             scenePass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
             scenePass.colorAttachments[0].loadAction = .clear
@@ -372,7 +376,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     }
 
     private func renderPrefilter(source: MTLTexture, dest: MTLTexture, commandBuffer: MTLCommandBuffer) {
-        let pass = MTLRenderPassDescriptor()
+        let pass = prefilterPassDescriptor
         pass.colorAttachments[0].texture = dest
         pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         pass.colorAttachments[0].loadAction = .clear
@@ -399,7 +403,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     }
 
     private func renderDownsample(source: MTLTexture, dest: MTLTexture, commandBuffer: MTLCommandBuffer) {
-        let pass = MTLRenderPassDescriptor()
+        let pass = downsamplePassDescriptor
         pass.colorAttachments[0].texture = dest
         pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         pass.colorAttachments[0].loadAction = .clear
@@ -415,7 +419,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     }
 
     private func renderUpsample(coarse: MTLTexture, fine: MTLTexture, dest: MTLTexture, commandBuffer: MTLCommandBuffer) {
-        let pass = MTLRenderPassDescriptor()
+        let pass = upsamplePassDescriptor
         pass.colorAttachments[0].texture = dest
         pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         pass.colorAttachments[0].loadAction = .clear
@@ -525,14 +529,6 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
-    private func computeTrailLength() -> Float {
-        let points = particleSystem.trail
-        guard points.count >= 2 else { return 0 }
-        return zip(points, points.dropFirst()).reduce(Float(0)) { acc, pair in
-            acc + simd_distance(pair.0.position, pair.1.position)
-        }
-    }
-
     private func appendShards(to vertices: inout [TexturedVertex]) {
         for shard in particleSystem.shards {
             let progress = Float(shard.ageMs / shard.lifetimeMs)
@@ -568,7 +564,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private func appendTrail(to vertices: inout [TexturedVertex], now: Double) {
         let points = particleSystem.trail
         guard points.count >= 2 else { return }
-        let lifetime: Double = 0.3
+        let lifetime = BAEffect.trail.lifetimeSec
 
         let totalLength = zip(points, points.dropFirst()).reduce(Float(0)) { acc, pair in
             acc + simd_distance(pair.0.position, pair.1.position)
@@ -642,7 +638,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         atEnd: Bool,
         to vertices: inout [TexturedVertex]
     ) {
-        let lifetime: Double = 0.3
+        let lifetime = BAEffect.trail.lifetimeSec
         let index = atEnd ? points.count - 1 : 0
         let point = points[index]
         let neighbor = atEnd ? points[index - 1] : points[index + 1]
@@ -815,7 +811,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private func updateProjection(view: MTKView) {
         let bounds = view.bounds
         viewportSize = SIMD2(Float(max(bounds.width, 1)), Float(max(bounds.height, 1)))
-        scale = Float(max(bounds.height, 1) / 1080.0)
+        scale = Float(max(bounds.height, 1)) / BAEffect.referenceHeight
         particleSystem.setViewportHeight(bounds.height)
 
         var pixelSize = view.drawableSize
@@ -860,7 +856,6 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         bloomDownTextures.removeAll()
         bloomUpTextures.removeAll()
-        bloomLevelSizes.removeAll()
         var w = bloomWidth
         var h = bloomHeight
         for _ in 0..<bloomLevelCount {
@@ -873,7 +868,6 @@ final class Renderer: NSObject, MTKViewDelegate {
             levelDesc.usage = [.renderTarget, .shaderRead, .shaderWrite]
             bloomDownTextures.append(device.makeTexture(descriptor: levelDesc)!)
             bloomUpTextures.append(device.makeTexture(descriptor: levelDesc)!)
-            bloomLevelSizes.append(CGSize(width: w, height: h))
             w = max(1, w / 2)
             h = max(1, h / 2)
         }
@@ -965,6 +959,16 @@ final class Renderer: NSObject, MTKViewDelegate {
     ) -> MTLTexture? {
         guard let url = resourceURL(name: name, ext: ext),
               let data = try? Data(contentsOf: url) else {
+            dlog("[renderer] texture \(name).\(ext): file not found")
+            return nil
+        }
+
+        // Validate the raw resource matches the hardcoded dimensions instead of
+        // silently uploading garbage (or crashing on a force-unwrap).
+        let bytesPerPixel = pixelFormat == .r8Unorm ? 1 : 4
+        let expected = width * height * bytesPerPixel
+        guard data.count == expected else {
+            dlog("[renderer] texture \(name).\(ext): expected \(expected) bytes, found \(data.count) — refusing to upload")
             return nil
         }
 
@@ -976,16 +980,18 @@ final class Renderer: NSObject, MTKViewDelegate {
         )
         descriptor.usage = [.shaderRead]
         guard let texture = device.makeTexture(descriptor: descriptor) else {
+            dlog("[renderer] texture \(name).\(ext): failed to create MTLTexture")
             return nil
         }
 
         let region = MTLRegionMake2D(0, 0, width, height)
         data.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return }
             texture.replace(
                 region: region,
                 mipmapLevel: 0,
-                withBytes: raw.baseAddress!,
-                bytesPerRow: width * (pixelFormat == .r8Unorm ? 1 : 4)
+                withBytes: base,
+                bytesPerRow: width * bytesPerPixel
             )
         }
         return texture

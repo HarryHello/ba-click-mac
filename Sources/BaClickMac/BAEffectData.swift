@@ -94,6 +94,9 @@ enum BAEval {
 }
 
 enum BAEffect {
+    /// Reference design height (px) that all world-scale values are derived
+    /// from; runtime viewport heights are normalized against it.
+    static let referenceHeight: Float = 1080
     static let worldToReferencePixels: Float = 540
     static let shardLocalScale: Float = 0.3078824
     static let shardUnit = worldToReferencePixels * shardLocalScale
@@ -208,21 +211,17 @@ enum BAEffect {
 
     enum trail {
         static let lifetimeMs: Float = 300
-        static let geometryWidth: Float = 0.005 * worldToReferencePixels
+        /// Single source of truth for the trail lifetime in seconds; the
+        /// renderer and the particle system must both use this (no hardcoded
+        /// 0.3 scattered around).
+        static let lifetimeSec: Double = Double(lifetimeMs) / 1000.0
         static let width: Float = 0.005 * worldToReferencePixels
         static let minVertexDistance: Float = 0.01 * worldToReferencePixels
-        static let trailOpacity: Float = 1.0
         static let gradient: [[Float]] = [
             [0, 0, 0, 0],
             [0.5794156, 0, 50, 130],
             [0.97941558, 0, 160, 255],
             [1, 0, 175, 255]
-        ]
-        static let coverageLongitudinalKeys: [[Float]] = [
-            [0, 0.15],
-            [0.248532, 0.15],
-            [0.97941558, 1],
-            [1, 1]
         ]
     }
 }

@@ -2,49 +2,94 @@ import Foundation
 
 /// Runtime tuning parameters. Edit `settings.json` next to the executable
 /// (or in the working directory) and save — the app reloads it every 0.5s.
+///
+/// The defaults below are the tuned "best" values (see README). An optional
+/// `settings.json` overrides them; a template lives in `settings.example.json`.
 struct FXSettings: Codable {
-    // User-tuned: trail thicker, click slightly smaller than strict 1:1.
-    var diskScale: Float = 0.8
-    var ringScale: Float = 0.8
-    var shardScale: Float = 0.8
-    var trailScale: Float = 1.8
-    // The NSPanel (+ fullScreenAuxiliary + canJoinAllSpaces) is added onto the
-    // fullscreen app's Space, so the fullscreen desktop contains BOTH windows
-    // (app window + this overlay) — that's how it appears over fullscreen apps.
-    // Default true so the panel is kept on the fullscreen Space; set false to
-    // hide + stop rendering (no GPU work) over fullscreen instead.
-    var showInFullscreen: Bool = true
-    // Click bloom source is intentionally weak; users can raise it if wanted.
-    var clickBloomStrength: Float = 0.05
-    var clickBloomSigma: Float = 14.0
-    // Trail HDR glow-source energy multiplier: this controls how strongly the
-    // trail lights up the area around it.
-    var trailBloomStrength: Float = 4.0
-    var trailBloomSigma: Float = 8.0
-    // Game MXFinalBloom exposure. Original uses Intensity 1.7, which becomes
-    // 2^(1.7/10)-1 = 0.125 in the composite.
-    var bloomStrength: Float = 1.7
-    // Maximum pyramid levels; the actual count follows the original diffusion
-    // formula and this only caps it.
-    var bloomLevels: Int = 16
-    // Original MXFinalBloom diffusion, drives iteration count and sample scale.
-    var bloomDiffusion: Float = 7.0
-    // Original MXFinalBloom prefilter threshold (in gamma space; shader converts
-    // to linear). Game value is 1.0.
-    var bloomThreshold: Float = 1.0
-    // Rational falloff knee for the glow overlay: a = lum/(lum+k). Smaller k lifts
-// the faint mid/far halo (overall brighter) while the core stays narrow.
-    var bloomFalloff: Float = 0.35
-    // Extra brightness for the glow overlay.
-    var bloomBoost: Float = 1.2
+    // Tuned "best" defaults, kept as single-source constants shared by both
+    // the default init and the lenient JSON decoder.
+    static let defaultDiskScale: Float = 0.8
+    static let defaultRingScale: Float = 0.8
+    static let defaultShardScale: Float = 0.8
+    static let defaultTrailScale: Float = 2.2
+    static let defaultShowInFullscreen: Bool = true
+    static let defaultClickBloomStrength: Float = 0.1
+    static let defaultTrailBloomStrength: Float = 3.5
+    static let defaultBloomStrength: Float = 1.7
+    static let defaultBloomLevels: Int = 16
+    static let defaultBloomDiffusion: Float = 7.0
+    static let defaultBloomThreshold: Float = 1.0
+    static let defaultBloomFalloff: Float = 0.35
+    static let defaultBloomBoost: Float = 1.2
+
+    var diskScale: Float
+    var ringScale: Float
+    var shardScale: Float
+    var trailScale: Float
+    var showInFullscreen: Bool
+    var clickBloomStrength: Float
+    var trailBloomStrength: Float
+    var bloomStrength: Float
+    var bloomLevels: Int
+    var bloomDiffusion: Float
+    var bloomThreshold: Float
+    var bloomFalloff: Float
+    var bloomBoost: Float
+
+    init() {
+        diskScale = Self.defaultDiskScale
+        ringScale = Self.defaultRingScale
+        shardScale = Self.defaultShardScale
+        trailScale = Self.defaultTrailScale
+        showInFullscreen = Self.defaultShowInFullscreen
+        clickBloomStrength = Self.defaultClickBloomStrength
+        trailBloomStrength = Self.defaultTrailBloomStrength
+        bloomStrength = Self.defaultBloomStrength
+        bloomLevels = Self.defaultBloomLevels
+        bloomDiffusion = Self.defaultBloomDiffusion
+        bloomThreshold = Self.defaultBloomThreshold
+        bloomFalloff = Self.defaultBloomFalloff
+        bloomBoost = Self.defaultBloomBoost
+    }
+
+    /// Lenient decoding: a `settings.json` may contain only the keys the user
+    /// wants to override; missing keys keep the defaults. (The synthesized
+    /// decoder would require every key, silently dropping the whole file and
+    /// falling back to defaults — so a partial edit would be lost.)
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        diskScale = try c.decodeIfPresent(Float.self, forKey: .diskScale) ?? Self.defaultDiskScale
+        ringScale = try c.decodeIfPresent(Float.self, forKey: .ringScale) ?? Self.defaultRingScale
+        shardScale = try c.decodeIfPresent(Float.self, forKey: .shardScale) ?? Self.defaultShardScale
+        trailScale = try c.decodeIfPresent(Float.self, forKey: .trailScale) ?? Self.defaultTrailScale
+        showInFullscreen = try c.decodeIfPresent(Bool.self, forKey: .showInFullscreen) ?? Self.defaultShowInFullscreen
+        clickBloomStrength = try c.decodeIfPresent(Float.self, forKey: .clickBloomStrength) ?? Self.defaultClickBloomStrength
+        trailBloomStrength = try c.decodeIfPresent(Float.self, forKey: .trailBloomStrength) ?? Self.defaultTrailBloomStrength
+        bloomStrength = try c.decodeIfPresent(Float.self, forKey: .bloomStrength) ?? Self.defaultBloomStrength
+        bloomLevels = try c.decodeIfPresent(Int.self, forKey: .bloomLevels) ?? Self.defaultBloomLevels
+        bloomDiffusion = try c.decodeIfPresent(Float.self, forKey: .bloomDiffusion) ?? Self.defaultBloomDiffusion
+        bloomThreshold = try c.decodeIfPresent(Float.self, forKey: .bloomThreshold) ?? Self.defaultBloomThreshold
+        bloomFalloff = try c.decodeIfPresent(Float.self, forKey: .bloomFalloff) ?? Self.defaultBloomFalloff
+        bloomBoost = try c.decodeIfPresent(Float.self, forKey: .bloomBoost) ?? Self.defaultBloomBoost
+    }
+
+    static let knownKeys: Set<String> = [
+        "diskScale", "ringScale", "shardScale", "trailScale",
+        "showInFullscreen", "clickBloomStrength", "trailBloomStrength",
+        "bloomStrength", "bloomLevels", "bloomDiffusion", "bloomThreshold",
+        "bloomFalloff", "bloomBoost",
+    ]
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()
         for url in candidates {
-            if let data = try? Data(contentsOf: url),
-               let decoded = try? JSONDecoder().decode(FXSettings.self, from: data) {
-                return decoded
+            guard let data = try? Data(contentsOf: url) else { continue }
+            guard let decoded = try? JSONDecoder().decode(FXSettings.self, from: data) else {
+                dlog("[settings] WARNING: could not parse \(url.path) — using defaults")
+                continue
             }
+            FXSettings.warnUnknownKeys(in: data, url: url)
+            return decoded
         }
         let defaults = FXSettings()
         if let url = candidates.first {
@@ -56,6 +101,16 @@ struct FXSettings: Codable {
             }
         }
         return defaults
+    }
+
+    /// Typo'd/unknown keys are silently ignored by Codable; warn so the user
+    /// doesn't tune a key that does nothing.
+    private static func warnUnknownKeys(in data: Data, url: URL) {
+        guard let object = try? JSONSerialization.jsonObject(with: data),
+              let dict = object as? [String: Any] else { return }
+        for key in dict.keys where !knownKeys.contains(key) {
+            dlog("[settings] WARNING: unknown key '\(key)' in \(url.path) (ignored)")
+        }
     }
 
     private static func candidateURLs() -> [URL] {

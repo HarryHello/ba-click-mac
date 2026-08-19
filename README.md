@@ -19,7 +19,7 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 | Trail | Cursor trail with width taper (tail thins, color stays constant) | 鼠标光迹，尾部收细（颜色不变） |
 | Glow | Ported original `MXFinalBloom` (multi-level pyramid, prefilter → downsample → upsample → additive) | 移植原版 `MXFinalBloom`（多级金字塔：预过滤 → 降采样 → 升采样 → 叠加） |
 | Fullscreen | NSPanel (`fullScreenAuxiliary`) is carried into fullscreen apps' Spaces automatically — works over QQ / Chrome fullscreen video | NSPanel（`fullScreenAuxiliary`）自动进入全屏应用的 Space —— QQ / Chrome 全屏视频下均正常 |
-| Live tuning | Edit `settings.json`, hot-reloaded every 0.5 s | 编辑 `settings.json`，每 0.5 秒热重载 |
+| Live tuning | Edit `settings.json`, hot-reloaded every 0.5 s; partial files allowed | 编辑 `settings.json`，每 0.5 秒热重载；允许只写要改的键 |
 | Power saving | Stops rendering when idle; no GPU work behind hidden fullscreen (`showInFullscreen=false`) | 闲置时停止渲染；隐藏全屏时不产生 GPU 开销（`showInFullscreen=false`） |
 
 ## Status / 状态
@@ -32,6 +32,8 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - ✅ Multi-pass MXFinalBloom (HDR scene → pyramid → additive glow) / 多级 MXFinalBloom 辉光（HDR 场景 → 金字塔 → 叠加辉光）
 - ✅ Works over fullscreen apps (single persistent NSPanel) / 全屏应用之上正常显示（单一常驻 NSPanel）
 - ✅ Manual 60 fps render loop (display-link stalls fixed) / 手动 60fps 渲染循环（修复 display link 停滞）
+- ✅ Idle power saving (render stops when nothing is on screen) / 闲置省电（无内容时停止渲染）
+- ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`) / 单元测试 + CI
 - ⏳ Multi-monitor (currently only the main screen) / 多显示器（目前仅主屏幕）
 - ⏳ Control panel / tray icon / 控制面板 / 托盘图标
 
@@ -42,22 +44,23 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - A Metal-capable Mac (any Apple Silicon, most Intel Macs)
 - 需要 Metal 支持的 Mac（Apple Silicon 或大部分 Intel Mac）
 
-## Build & run / 构建与运行
+## Build, run & test / 构建、运行与测试
 
 ```bash
-./build.sh          # compile → .build/ba-click-mac
-./run.sh            # build (if needed) then run
+./build.sh            # compile → .build/ba-click-mac
+./run.sh              # build (if needed) then run
+./test.sh             # unit tests: BAEval / ParticleSystem / FXSettings
 ```
 
 Or build a double-clickable app bundle / 或构建可双击的 .app 包:
 
 ```bash
-./build-app.sh
+./build-app.sh        # == ./build.sh --app → build/BaClickMac.app
 open build/BaClickMac.app
 ```
 
-Quit: menu bar → **Quit BaClickMac** (`Cmd+Q`), or `kill` the process.
-退出：菜单栏 → **Quit BaClickMac**（`Cmd+Q`），或直接 kill 进程。
+Quit / 退出: the app shows in the Dock (`.regular` activation policy) — use the Dock icon → **Quit BaClickMac** (`Cmd+Q`), or `pkill BaClickMac` from the terminal.
+应用显示在 Dock（`.regular` 激活策略）——用 Dock 图标 → **Quit BaClickMac**（`Cmd+Q`），或终端 `pkill BaClickMac`。
 
 ### Isolated click testing / 单独测试点击特效
 
@@ -76,21 +79,19 @@ BA_CLICK_LOOP=1 ./run.sh   # auto-clicks screen center every 0.9 s
 
 ## settings.json (live tuning / 实时调参)
 
-The app loads `settings.json` from the **current working directory**, the **executable's folder**, or `~/.ba-click-mac-settings.json` (first found wins) and **reloads it every 0.5 s** — edit and save, no restart needed.
+The app loads `settings.json` from the **current working directory**, the **executable's folder**, or `~/.ba-click-mac-settings.json` (first found wins) and **reloads it every 0.5 s** — edit and save, no restart needed. The file is optional: **the defaults below are the tuned "best" values**, so you can run without any settings file. A full template lives in `settings.example.json`.
 
-应用会从**当前工作目录**、**可执行文件所在目录**或 `~/.ba-click-mac-settings.json`（按顺序取第一个存在的）加载 `settings.json`，并**每 0.5 秒热重载**——改完保存即可，无需重启。
+应用会从**当前工作目录**、**可执行文件所在目录**或 `~/.ba-click-mac-settings.json`（按顺序取第一个存在的）加载 `settings.json`，并**每 0.5 秒热重载**——改完保存即可，无需重启。该文件是可选的：**下表默认值就是调好的"最佳"参数**，不提供文件也能直接跑。完整模板见 `settings.example.json`。
 
 | Key | Default | Meaning / 含义 |
 |---|---|---|
 | `diskScale` | `0.8` | Center disk size multiplier / 中心圆盘尺寸倍率 |
 | `ringScale` | `0.8` | Arc (弧光) radius multiplier / 弧光半径倍率 |
 | `shardScale` | `0.8` | Shard size/speed multiplier / 碎片大小与速度倍率 |
-| `trailScale` | `1.8` | Trail width multiplier / 光迹宽度倍率 |
+| `trailScale` | `2.2` | Trail width multiplier / 光迹宽度倍率 |
 | `showInFullscreen` | `true` | Keep overlay over fullscreen apps; `false` = hide + stop rendering | 在全屏应用上显示覆盖层；`false` = 隐藏并停止渲染 |
-| `clickBloomStrength` | `0.05` | Click glow-source energy / 点击辉光源能量 |
-| `clickBloomSigma` | `14.0` | Click glow spread / 点击辉光扩散 |
-| `trailBloomStrength` | `4.0` | Trail glow-source energy / 光迹辉光源能量 |
-| `trailBloomSigma` | `8.0` | Trail glow spread / 光迹辉光扩散 |
+| `clickBloomStrength` | `0.1` | Click glow-source energy / 点击辉光源能量 |
+| `trailBloomStrength` | `3.5` | Trail glow-source energy / 光迹辉光源能量 |
 | `bloomStrength` | `1.7` | MXFinalBloom exposure (`2^(strength/10)-1` in composite) / 辉光曝光 |
 | `bloomLevels` | `16` | Max pyramid levels (actual count follows the diffusion formula) / 金字塔最大层数（实际层数由扩散公式决定） |
 | `bloomDiffusion` | `7.0` | MXFinalBloom diffusion — drives iteration count + sample scale / 扩散度——决定迭代次数与采样尺度 |
@@ -98,9 +99,12 @@ The app loads `settings.json` from the **current working directory**, the **exec
 | `bloomFalloff` | `0.35` | Rational falloff knee `a = lum/(lum+k)` / 有理式衰减拐点 |
 | `bloomBoost` | `1.2` | Extra glow overlay brightness / 辉光叠加额外亮度 |
 
-> The defaults above are the code defaults in `FXSettings.swift`. The `settings.json` in this repo currently contains the values you tuned live (e.g. `trailScale: 2.2`, `clickBloomStrength: 0.1`, `trailBloomStrength: 3.5`) — it overrides the defaults and is not required to run.
+> **Lenient parsing / 宽容解析**: a `settings.json` may contain **only the keys you want to override** — missing keys keep the defaults. Unknown keys print a warning to stderr (ignored); invalid JSON prints a warning and falls back to defaults. This is intentional, so a partial edit never silently wipes your other settings.
 >
-> 上表是 `FXSettings.swift` 中的代码默认值。仓库里的 `settings.json` 目前保存的是你实时调好的参数（如 `trailScale: 2.2`、`clickBloomStrength: 0.1`、`trailBloomStrength: 3.5`），会覆盖默认值；不提供该文件也能运行。
+> **解析规则**：`settings.json` 可以**只写你要改的键**——缺失的键沿用默认值。未知键会在 stderr 打印告警（忽略）；JSON 非法会打印告警并回退默认值。这是刻意设计：部分修改不会悄悄丢掉其它设置。
+>
+> `settings.json` is **git-ignored** (personal tuning stays local); commit changes to `settings.example.json` instead.
+> `settings.json` 已被 **git 忽略**（个人调参留在本地）；如需提交参数，请改 `settings.example.json`。
 
 ## How it works / 工作原理
 
@@ -127,9 +131,16 @@ Sources/BaClickMac/
   ParticleSystem.swift       Click particles + trail simulation
   Renderer.swift             Metal pipelines, geometry building, bloom pyramid
   Shaders.swift              Metal Shader Language source (runtime compiled)
-  FXSettings.swift           settings.json loading / defaults
+  FXSettings.swift           settings.json loading / defaults (lenient decode)
   BAEffectData.swift         Unity keyframes / game-derived values
-  DebugLog.swift             stderr logging helper
+  DebugLog.swift             stderr logging + bail() helper
+Tests/
+  main.swift                 Unit tests: BAEval / ParticleSystem / FXSettings
+.github/workflows/build.yml  CI: build + unit tests on macOS
+build.sh                     Build binary, or --app for the .app bundle
+build-app.sh                 Wrapper for ./build.sh --app
+test.sh                      Build & run the unit tests
+settings.example.json        Template for optional runtime tuning
 ```
 
 ## Permissions / 权限
@@ -140,9 +151,10 @@ Global mouse observation via `NSEvent.addGlobalMonitorForEvents` is generally al
 ## Troubleshooting / 排障
 
 - **Effect appears randomly / 特效随机消失或时有时无**: this used to be the MTKView display link stalling after Space/fullscreen transitions — now fixed by the manual 60 fps render loop. If it ever looks dead again, check the watchdog (a stale frame forces a redraw every 0.5 s). / 这曾是 MTKView display link 在 Space/全屏切换后停滞所致——现已通过手动 60fps 渲染循环修复。若再次看起来"死了"，看门狗每 0.5 秒会强制补一帧。
+- **App exits immediately with a `FATAL:` message / 启动即退出并打印 `FATAL:`**: Metal device / shader compile / texture load failed — run from a terminal to see the exact reason (resources must exist in `Resources/` with the expected sizes). / Metal 设备 / Shader 编译 / 纹理加载失败——请从终端运行查看具体原因（`Resources/` 下资源必须存在且尺寸匹配）。
 - **No click response at all / 点击完全无反应**: make sure the app is not frontmost (never `activate` it); the global mouse monitor only receives events while another app is active. / 请确认应用不是前台（绝不 `activate`）；全局鼠标监听只在其他应用为前台时才能收到事件。
 - **HUD shows nothing / HUD 不显示**: it is off by default — run with `BA_SHOW_HUD=1`. / 默认关闭——用 `BA_SHOW_HUD=1` 运行。
-- **Settings not applied / 设置没生效**: the app reloads every 0.5 s; make sure you saved the JSON and it's valid. / 应用每 0.5 秒重载；请确认 JSON 已保存且格式正确。
+- **Settings not applied / 设置没生效**: the app reloads every 0.5 s; watch stderr for `[settings] WARNING:` (invalid JSON → defaults; unknown key → ignored). / 应用每 0.5 秒重载；留意 stderr 的 `[settings] WARNING:`（JSON 非法 → 回退默认值；未知键 → 忽略）。
 
 ## Notes / 备注
 

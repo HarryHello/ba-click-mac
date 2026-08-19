@@ -49,7 +49,7 @@ final class ParticleSystem {
     private var trailDistanceSinceShard: Float = 0
 
     func setViewportHeight(_ height: CGFloat) {
-        scale = Float(max(height, 1) / 1080.0)
+        scale = Float(max(height, 1)) / BAEffect.referenceHeight
     }
 
     func addClick(at position: SIMD2<Float>) {
@@ -97,7 +97,7 @@ final class ParticleSystem {
 
         bursts.removeAll { $0.ageMs >= Double(BAEffect.rings.lifetimeMs) }
         shards.removeAll { $0.ageMs >= $0.lifetimeMs }
-        trail.removeAll { now - $0.time >= 0.3 }
+        trail.removeAll { now - $0.time >= BAEffect.trail.lifetimeSec }
 
         lastTime = now
     }

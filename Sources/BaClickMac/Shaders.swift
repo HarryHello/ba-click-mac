@@ -212,30 +212,6 @@ enum ShaderSource {
         return out;
     }
 
-    // Composite pass (original MXFinalBloom): source + 4-tap bloom * intensity.
-    fragment float4 composite_fragment(
-        FullscreenOut in [[stage_in]],
-        texture2d<float> scene [[texture(0)]],
-        texture2d<float> bloom [[texture(1)]],
-        sampler samp [[sampler(0)]],
-        constant float2 &bloomTexel [[buffer(0)]],
-        constant float2 &sampleScaleAndIntensity [[buffer(1)]]
-    ) {
-        float2 uv = float2(in.uv.x, 1.0 - in.uv.y);
-        float2 offset = bloomTexel * sampleScaleAndIntensity.x * 0.5;
-        float3 b =
-            bloom.sample(samp, uv + offset * float2(-1.0, -1.0)).rgb +
-            bloom.sample(samp, uv + offset * float2(1.0, -1.0)).rgb +
-            bloom.sample(samp, uv + offset * float2(-1.0, 1.0)).rgb +
-            bloom.sample(samp, uv + offset * float2(1.0, 1.0)).rgb;
-        b *= 0.25 * sampleScaleAndIntensity.y;
-        float4 s = scene.sample(samp, uv);
-        float3 color = s.rgb + b;
-        float maxColor = max(max(color.r, color.g), color.b);
-        float alpha = clamp(max(s.a, maxColor), 0.0, 1.0);
-        return float4(color * alpha, alpha);
-    }
-
     float2 flipUV(float2 uv) {
         return float2(uv.x, 1.0 - uv.y);
     }

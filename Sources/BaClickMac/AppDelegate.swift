@@ -24,11 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fullscreenHidden = false
     private var lastFullscreenState: Bool?
 
+    private static let renderFrameInterval: TimeInterval = 1.0 / 60.0
+    private static let housekeepingInterval: TimeInterval = 0.5
+    private static let stallThreshold: TimeInterval = 0.5
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
 
         guard let screen = NSScreen.main ?? NSScreen.screens.first else {
-            fatalError("No screen available")
+            bail("No screen available")
         }
 
         let frame = screen.frame
@@ -63,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window = panel
 
         guard let device = MTLCreateSystemDefaultDevice() else {
-            fatalError("Metal is not supported on this Mac")
+            bail("Metal is not supported on this Mac")
         }
 
         let overlayView = TransparentMTKView(frame: frame, device: device)
@@ -81,7 +85,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayView.enableSetNeedsDisplay = false
         self.overlayView = overlayView
 
-        let renderer = Renderer(view: overlayView)
+        guard let renderer = Renderer(view: overlayView) else {
+            bail("Failed to initialize Metal renderer (shader compile or resource load failed)")
+        }
         self.renderer = renderer
         window?.contentView = overlayView
         window?.orderFrontRegardless()
@@ -107,6 +113,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Don't fight the intentional hide used for fullscreen apps.
                 guard !self.fullscreenHidden else { return }
                 self.startRenderTimer()
+                // Recompute fullscreen state immediately (e.g. on app
+                // activation / Space change) instead of waiting for the next
+                // 0.5s housekeeping tick.
+                self.updateFullscreenState()
                 self.reapplyTransparency()
                 self.overlayView?.window?.orderFrontRegardless()
             }
@@ -155,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlayView.addSubview(label)
             self.statusLabel = label
         }
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: Self.housekeepingInterval, repeats: true) { [weak self] _ in
             self?.updateStatus()
             self?.updateFullscreenState()
             self?.checkStall()
@@ -231,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // startRenderTimer), that's not a stall either.
         guard renderTimer != nil else { return }
         let now = CACurrentMediaTime()
-        if renderer.lastDrawTime == 0 || now - renderer.lastDrawTime > 0.5 {
+        if renderer.lastDrawTime == 0 || now - renderer.lastDrawTime > Self.stallThreshold {
             overlayView.draw() // force one frame now instead of waiting a tick
             overlayView.window?.orderFrontRegardless()
             reapplyTransparency()
@@ -248,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startRenderTimer() {
         guard renderTimer == nil, let overlayView else { return }
         overlayView.isPaused = true
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: Self.renderFrameInterval, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.overlayView?.draw()
             // Nothing left on screen -> stop until the next interaction.
