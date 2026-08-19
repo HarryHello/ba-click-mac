@@ -25,9 +25,9 @@ struct FXSettings: Codable {
     // Original MXFinalBloom prefilter threshold (in gamma space; shader converts
     // to linear). Game value is 1.0.
     var bloomThreshold: Float = 1.0
-    // Low-gamma alpha lift for the transparent overlay: < 1 lifts the faint
-    // outer halo so it visibly illuminates the surroundings; > 1 tightens it.
-    var bloomFalloff: Float = 0.6
+    // Falloff exponent for the glow overlay: ~1 is near-linear like the game's
+// additive composite (bright near, smooth decay); < 1 lifts the outer halo.
+    var bloomFalloff: Float = 0.9
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()

@@ -568,7 +568,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
 
         let halfWidth = BAEffect.trail.width * settings.trailScale * scale * 0.5
-        let materialIntensity: Float = 8.0
+        let materialIntensity = Renderer.trailMaterialIntensity
 
         for i in 1..<points.count {
             let from = points[i - 1]
@@ -649,7 +649,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         let progress = (distances[index] ) / totalLength
         let color = Renderer.linearEnergy(
             BAEval.color(BAEffect.trail.gradient, progress),
-            intensity: 23.968628
+            intensity: Renderer.trailMaterialIntensity
         )
         let age = max(0, min(1, (now - point.time) / lifetime))
         let fade = Float(1 - age)
@@ -969,6 +969,11 @@ final class Renderer: NSObject, MTKViewDelegate {
         ]
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
     }
+
+    /// Trail HDR emission intensity. Original material _Color is 23.97; we
+    /// keep the window core readable (not blown white) while the scene energy
+    /// is restored to ~24 via trailBloomStrength.
+    private static let trailMaterialIntensity: Float = 6.0
 
     private static func srgbToLinear(_ value: Float) -> Float {
         let c = min(max(value / 255.0, 0), 1)

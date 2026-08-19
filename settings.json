@@ -11,5 +11,5 @@
   "bloomLevels": 16,
   "bloomDiffusion": 7.0,
   "bloomThreshold": 1.0,
-  "bloomFalloff": 0.6
+  "bloomFalloff": 0.9
 }

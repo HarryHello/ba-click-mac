@@ -319,12 +319,12 @@ enum ShaderSource {
         if (lum <= 0.001) {
             return float4(0.0);
         }
-        // Low-gamma lift: falloff < 1 raises the faint wide halo so the area
-        // around the source is visibly illuminated.
-        float a = pow(clamp(lum, 0.0, 1.0), max(falloff, 0.35));
-        // Normalized hue, desaturated toward a pale glow.
+        // Near-linear falloff: bright near the source, smooth decay, no
+        // far-field fog lift (game glow is additive-linear).
+        float a = pow(clamp(lum, 0.0, 1.0), max(falloff, 0.6));
+        // Keep the blue particle hue; only the very bright inner glow whitens.
         float3 n = e / lum;
-        float whiteMix = clamp(a * 1.5, 0.35, 0.9);
+        float whiteMix = clamp((a - 0.55) * 1.4, 0.0, 0.35);
         n = mix(n, float3(1.0), whiteMix);
         // Premultiplied light color: visible contribution is n * a.
         return float4(n * a, a);
