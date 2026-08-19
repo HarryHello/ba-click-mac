@@ -278,7 +278,8 @@ enum ShaderSource {
         return acc * 0.25 + fine.sample(samp, uv);
     }
 
-    // Bloom overlay: adds a wide, soft, pale halo on top of the sharp core.
+    // Bloom overlay: adds the full blurred bloom on top of the sharp core.
+    // This is what actually "lights up the surroundings" — no core subtraction.
     fragment float4 bloom_add_fragment(
         FullscreenOut in [[stage_in]],
         texture2d<float> bloom [[texture(0)]],
@@ -289,28 +290,22 @@ enum ShaderSource {
     ) {
         float2 uv = float2(in.uv.x, 1.0 - in.uv.y);
         float4 b = bloom.sample(samp, uv);
-        float4 s = scene.sample(samp, uv);
-        // Halo-only: don't duplicate the bright core, but don't carve a dark
-        // ring around it either, so subtract at half the core energy.
-        float3 e = max(b.rgb - s.rgb * 0.5, 0.0) * max(strength, 0.0);
-        // Filmic-style mapping: HDR energy -> [0,1] with a soft wide falloff
-        // so the faint outer halo stays visible instead of crushing to a dark
-        // blue rim.
-        float3 c = 1.0 - exp(-e);
-        // Lift the hue toward clean pale sky/white glow (Blue Archive style)
-        // rather than a saturated deep blue at the edges.
-        float lum = max(max(c.r, c.g), c.b);
-        if (lum > 0.001) {
-            float3 n = c / lum;
-            // Brightness-weighted desaturation toward pure white: dim edges
-            // still get a strong white mix so they never read as deep blue.
-            float whiteMix = clamp(lum * 1.6, 0.25, 0.9);
-            c = mix(n, float3(1.0), whiteMix) * lum;
+        // Use the whole bloom image, not a halo-only subtraction. The source
+        // core is already drawn; adding bloom makes the surroundings glow.
+        float3 e = b.rgb * max(strength, 0.0);
+        float lum = max(max(e.r, e.g), e.b);
+        if (lum <= 0.001) {
+            return float4(0.0);
         }
-        // Gentle exponent: falloff < 1 widens the halo, > 1 tightens it.
-        c = pow(clamp(c, 0.0, 1.0), max(falloff, 0.5));
-        float a = clamp(lum, 0.0, 1.0);
-        return float4(c * a, a);
+        // Low-gamma lift: falloff < 1 raises the faint wide halo so the area
+        // around the source is visibly illuminated, not just a dark blue rim.
+        float a = pow(clamp(lum, 0.0, 1.0), max(falloff, 0.35));
+        // Normalized hue, desaturated toward a pale sky/white glow.
+        float3 n = e / lum;
+        float whiteMix = clamp(a * 1.5, 0.35, 0.9);
+        n = mix(n, float3(1.0), whiteMix);
+        // Premultiplied light color: visible contribution is n * a.
+        return float4(n * a, a);
     }
     """
 }

@@ -3,12 +3,12 @@
   "ringScale": 0.85,
   "shardScale": 1.0,
   "trailScale": 1.4,
-  "clickBloomStrength": 1.5,
+  "clickBloomStrength": 0.05,
   "clickBloomSigma": 14.0,
-  "trailBloomStrength": 3.0,
+  "trailBloomStrength": 4.0,
   "trailBloomSigma": 8.0,
   "bloomStrength": 1.0,
   "bloomLevels": 8,
   "bloomThreshold": 0.05,
-  "bloomFalloff": 1.0
+  "bloomFalloff": 0.6
 }
