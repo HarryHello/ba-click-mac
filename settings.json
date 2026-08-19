@@ -5,7 +5,7 @@
   "trailScale": 1.4,
   "clickBloomStrength": 1.0,
   "clickBloomSigma": 14.0,
-  "trailBloomStrength": 0.3,
-  "trailBloomSigma": 2.0,
+  "trailBloomStrength": 2.0,
+  "trailBloomSigma": 8.0,
   "bloomFalloff": 2.0
 }

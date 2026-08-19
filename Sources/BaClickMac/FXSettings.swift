@@ -14,8 +14,8 @@ struct FXSettings: Codable {
     // Trail glow is mostly carried by the Trail_03 texture (self-luminous
     // streak); the blur bloom is only a tiny tight halo so it won't form round
     // blobs or accumulate brightness with trail length.
-    var trailBloomStrength: Float = 0.3
-    var trailBloomSigma: Float = 2.0
+    var trailBloomStrength: Float = 2.0
+    var trailBloomSigma: Float = 8.0
     // >1 makes the glow peak brighter and fall off faster around the edges.
     var bloomFalloff: Float = 2.0
 

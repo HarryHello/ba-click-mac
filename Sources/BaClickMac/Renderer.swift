@@ -454,6 +454,13 @@ final class Renderer: NSObject, MTKViewDelegate {
         guard points.count >= 2 else { return }
         let lifetime: Double = 0.3
 
+        // For the bloom source the whole trail uses one uniform brightness that
+        // only fades after the newest point ages out (cursor stopped). This
+        // keeps the glow a continuous line instead of a bright head point.
+        let newestTime = points.last!.time
+        let overallAge = max(0, min(1, (now - newestTime) / lifetime))
+        let overallFade = Float(1 - overallAge)
+
         let totalLength = zip(points, points.dropFirst()).reduce(Float(0)) { acc, pair in
             acc + simd_distance(pair.0.position, pair.1.position)
         }
@@ -520,13 +527,13 @@ final class Renderer: NSObject, MTKViewDelegate {
             let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: fromAlpha, coverageFactor: fromCov)
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
 
-            // Thin, uniform-emission line for the real bloom pass. Coverage is
-            // held at 1 (only age-faded) so the whole trail glows evenly.
+            // Thin, uniform-emission line for the real bloom pass. The whole
+            // line is equally bright (overallFade) so blur yields a glow line.
             let bloomOffset = normal * bloomHalfWidth
-            let b0 = TexturedVertex(position: from.position + bloomOffset, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: fromFade, coverageFactor: 1)
-            let b1 = TexturedVertex(position: to.position + bloomOffset, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: toFade, coverageFactor: 1)
-            let b2 = TexturedVertex(position: to.position - bloomOffset, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: toFade, coverageFactor: 1)
-            let b3 = TexturedVertex(position: from.position - bloomOffset, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: fromFade, coverageFactor: 1)
+            let b0 = TexturedVertex(position: from.position + bloomOffset, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: overallFade, coverageFactor: 1)
+            let b1 = TexturedVertex(position: to.position + bloomOffset, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: overallFade, coverageFactor: 1)
+            let b2 = TexturedVertex(position: to.position - bloomOffset, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: overallFade, coverageFactor: 1)
+            let b3 = TexturedVertex(position: from.position - bloomOffset, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: overallFade, coverageFactor: 1)
             bloom.append(contentsOf: [b0, b1, b2, b0, b2, b3])
         }
     }
