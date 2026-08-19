@@ -12,6 +12,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusTimer: Timer?
     private var spaceObserver: NSObjectProtocol?
     private var clickLoopTimer: Timer?
+    /// Manual 60fps render loop. We drive MTKView.draw() ourselves instead of
+    /// relying on the MTKView display link, which macOS randomly stalls after
+    /// Space/fullscreen transitions — that made the effect appear "randomly".
+    private var renderTimer: Timer?
+    /// Prevents App Nap from throttling the render timer while we are a
+    /// non-activating background overlay.
+    private var activityToken: NSObjectProtocol?
     /// Set when we intentionally hid+paused the overlay for a fullscreen app,
     /// so recover()/checkStall() don't fight the hidden state.
     private var fullscreenHidden = false
@@ -66,7 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayView.framebufferOnly = true
         overlayView.colorPixelFormat = .bgra8Unorm
         overlayView.preferredFramesPerSecond = 60
-        overlayView.isPaused = false
+        // Manual render loop: pause the MTKView's internal display link and
+        // drive draw() ourselves (see startRenderTimer). The display link
+        // stalls randomly after Space/fullscreen transitions; a self-driven
+        // timer keeps rendering deterministic.
+        overlayView.isPaused = true
         overlayView.enableSetNeedsDisplay = false
         self.overlayView = overlayView
 
@@ -77,6 +88,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         self.reapplyTransparency()
 
+        // This overlay is never the frontmost app, so App Nap would throttle
+        // its timers/rendering randomly. Assert an activity so clicks are
+        // always processed and frames always drawn.
+        activityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated],
+            reason: "ba-click overlay: keep rendering and mouse handling live"
+        )
+
+        startRenderTimer()
+
         // Some macOS Spaces switches demote or hide the overlay window even
         // though it joins all spaces; re-assert ordering + transparency after
         // every active-space / screen change so the effect doesn't vanish.
@@ -85,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 // Don't fight the intentional hide used for fullscreen apps.
                 guard !self.fullscreenHidden else { return }
+                self.startRenderTimer()
                 self.reapplyTransparency()
                 self.overlayView?.window?.orderFrontRegardless()
             }
@@ -188,24 +210,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Watchdog: system animations (Mission Control, Spaces, full-screen
-    /// transitions) can stall the MTKView display link, leaving the last
-    /// frame frozen on screen. If no draw callback has run for >0.5s, restart
-    /// the display link, force an immediate frame and reassert the layer.
+    /// Watchdog: with the manual render timer, a stall can only happen if the
+    /// main runloop was blocked (Space animation, Mission Control, etc.) or
+    /// the timer died. If no draw callback has run for >0.5s, make sure the
+    /// timer is alive, force one frame immediately and reassert the layer.
     private func checkStall() {
         guard let renderer, let overlayView else { return }
         // If we intentionally stopped rendering for a fullscreen app, that's
         // not a stall — don't wake it up to burn GPU behind the fullscreen app.
         if fullscreenHidden { return }
-        guard renderer.lastDrawTime > 0 else { return }
         let now = CACurrentMediaTime()
-        if now - renderer.lastDrawTime > 0.5 {
-            overlayView.isPaused = true
-            overlayView.isPaused = false
+        if renderer.lastDrawTime == 0 || now - renderer.lastDrawTime > 0.5 {
+            startRenderTimer()
             overlayView.draw() // force one frame now instead of waiting a tick
             overlayView.window?.orderFrontRegardless()
             reapplyTransparency()
         }
+    }
+
+    /// Start the manual 60fps render loop (idempotent). The MTKView's own
+    /// display link stays paused; we call draw() ourselves so rendering never
+    /// depends on AppKit's fragile display-link lifecycle.
+    private func startRenderTimer() {
+        guard renderTimer == nil, let overlayView else { return }
+        overlayView.isPaused = true
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.overlayView?.draw()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        renderTimer = timer
+    }
+
+    private func stopRenderTimer() {
+        renderTimer?.invalidate()
+        renderTimer = nil
     }
 
     /// Fullscreen handling for the single persistent NSPanel:
@@ -215,18 +253,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///  - showInFullscreen=false: when a fullscreen app is active, hide + stop
     ///    rendering so no GPU work happens behind it; resume on desktop.
     private func updateFullscreenState() {
-        guard let renderer, let overlayView else { return }
+        guard let renderer else { return }
         let fullscreen = isFullscreenAppActive()
         if fullscreen == lastFullscreenState { return }
         lastFullscreenState = fullscreen
 
         if fullscreen && !renderer.settings.showInFullscreen {
             fullscreenHidden = true
+            stopRenderTimer()
             window?.orderOut(nil)
-            overlayView.isPaused = true
         } else {
             fullscreenHidden = false
-            overlayView.isPaused = false
+            startRenderTimer()
             window?.level = .floating
             window?.orderFrontRegardless()
             reapplyTransparency()

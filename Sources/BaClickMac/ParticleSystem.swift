@@ -86,9 +86,13 @@ final class ParticleSystem {
         pendingClicks.removeAll()
 
         let deltaMs = (now - lastTime) * 1000
-        if deltaMs > 0 && deltaMs < 100 {
-            updateBursts(deltaMs: deltaMs)
-            updateShards(deltaMs: deltaMs)
+        if deltaMs > 0 {
+            // Clamp the step so a big frame gap (runloop hiccup, Space
+            // animation) advances the effect by at most ~2 frames instead of
+            // teleporting/skipping the whole ~0.45s animation.
+            let step = min(deltaMs, 33.0)
+            updateBursts(deltaMs: step)
+            updateShards(deltaMs: step)
         }
 
         bursts.removeAll { $0.ageMs >= Double(BAEffect.rings.lifetimeMs) }
