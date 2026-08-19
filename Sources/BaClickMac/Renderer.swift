@@ -160,7 +160,9 @@ final class Renderer: NSObject, MTKViewDelegate {
                 pixelFormat: .rgba16Float
             )
             // Fallback (no bloom targets) pipelines target the window directly.
-            self.diskPipeline = try Renderer.makePipeline(
+            // The disk is AlphaBlend_Add in the original -> over-blend, so the
+            // central circle blends over the desktop instead of pure-add.
+            self.diskPipeline = try Renderer.makeOverPipeline(
                 device: device,
                 vertexFunction: texturedVertex,
                 fragmentFunction: diskFragment,
@@ -886,6 +888,32 @@ final class Renderer: NSObject, MTKViewDelegate {
         attachment.sourceRGBBlendFactor = .one
         attachment.sourceAlphaBlendFactor = .one
         attachment.destinationRGBBlendFactor = .one
+        attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
+
+        return try device.makeRenderPipelineState(descriptor: descriptor)
+    }
+
+    /// Standard "over" blend: matches the game's AlphaBlend_Add (Cross2 disk:
+    /// Blend One OneMinusSrcAlpha). The disk blends over the background instead
+    /// of pure-additive so it doesn't over-brighten like a solid flame.
+    private static func makeOverPipeline(
+        device: MTLDevice,
+        vertexFunction: MTLFunction,
+        fragmentFunction: MTLFunction,
+        pixelFormat: MTLPixelFormat
+    ) throws -> MTLRenderPipelineState {
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = vertexFunction
+        descriptor.fragmentFunction = fragmentFunction
+        descriptor.colorAttachments[0].pixelFormat = pixelFormat
+
+        let attachment = descriptor.colorAttachments[0]!
+        attachment.isBlendingEnabled = true
+        attachment.rgbBlendOperation = .add
+        attachment.alphaBlendOperation = .add
+        attachment.sourceRGBBlendFactor = .one
+        attachment.sourceAlphaBlendFactor = .one
+        attachment.destinationRGBBlendFactor = .oneMinusSourceAlpha
         attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
 
         return try device.makeRenderPipelineState(descriptor: descriptor)
