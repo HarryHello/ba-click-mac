@@ -83,6 +83,7 @@ final class Renderer: NSObject, MTKViewDelegate {
               let ringFragment = library.makeFunction(name: "ring_fragment"),
               let triangleFragment = library.makeFunction(name: "triangle_fragment"),
               let trailFragment = library.makeFunction(name: "trail_fragment"),
+              let trailSceneFragment = library.makeFunction(name: "trail_scene_fragment"),
               let fullscreenVertex = library.makeFunction(name: "fullscreen_vertex"),
               let compositeFragment = library.makeFunction(name: "composite_fragment"),
               let bloomAddFragment = library.makeFunction(name: "bloom_add_fragment") else {
@@ -137,7 +138,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             self.sceneTrailPipeline = try Renderer.makePipeline(
                 device: device,
                 vertexFunction: texturedVertex,
-                fragmentFunction: trailFragment,
+                fragmentFunction: trailSceneFragment,
                 pixelFormat: .rgba16Float
             )
             // Fallback (no bloom targets) pipelines target the window directly.
