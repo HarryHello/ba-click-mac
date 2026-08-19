@@ -8,9 +8,10 @@ struct FXSettings: Codable {
     var ringScale: Float = 0.8
     var shardScale: Float = 0.8
     var trailScale: Float = 1.8
-    // When another app is in fullscreen: show the overlay over it if desired.
-    // macOS often hides normal overlays over fullscreen Spaces; when false the
-    // overlay is hidden and rendering is fully stopped (no wasted GPU behind).
+    // When another app is in fullscreen: macOS won't let a normal panel
+    // composite over the fullscreen surface, so the sensible default is false:
+    // hide the overlay and stop rendering (no wasted GPU behind the fullscreen
+    // app). Set true to attempt overlay (rarely shown) — your choice.
     var showInFullscreen: Bool = false
     // Click bloom source is intentionally weak; users can raise it if wanted.
     var clickBloomStrength: Float = 0.05

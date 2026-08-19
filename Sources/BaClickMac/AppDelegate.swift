@@ -44,11 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
+        // Exactly the Tauri set: FullScreenAuxiliary | CanJoinAllSpaces.
         panel.collectionBehavior = [
             .canJoinAllSpaces,
-            .stationary,
-            .fullScreenAuxiliary,
-            .ignoresCycle
+            .fullScreenAuxiliary
         ]
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
