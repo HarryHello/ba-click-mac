@@ -126,7 +126,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         // Load the original game-derived textures from the web project.
         guard let circle = Renderer.loadTexture(device: device, name: "circle", ext: "rgba", width: 512, height: 512, pixelFormat: .rgba8Unorm_srgb),
               let ring = Renderer.loadTexture(device: device, name: "ring", ext: "raw", width: 256, height: 128, pixelFormat: .r8Unorm),
-              let triangle = Renderer.loadTexture(device: device, name: "triangle", ext: "rgba", width: 128, height: 128, pixelFormat: .rgba8Unorm_srgb),
+              let triangle = Renderer.loadTexture(device: device, name: "triangle", ext: "rgba", width: 256, height: 128, pixelFormat: .rgba8Unorm_srgb),
               let trail = Renderer.loadTexture(device: device, name: "trail", ext: "rgba", width: 512, height: 512, pixelFormat: .rgba8Unorm_srgb) else {
             return nil
         }
@@ -525,9 +525,13 @@ final class Renderer: NSObject, MTKViewDelegate {
             let size = shard.size * BAEval.hermite(BAEffect.shards.sizeKeys, progress)
             let color = BAEval.color(BAEffect.shards.colorKeys, progress)
             let material = Renderer.linearEnergy(color, intensity: BAEffect.shards.hdrIntensity) * BAEffect.shards.startColor
-            let flipV = shard.textureFrame % 2 == 1
-            let uvMin = SIMD2<Float>(0, flipV ? 1 : 0)
-            let uvMax = SIMD2<Float>(1, flipV ? 0 : 1)
+            // Original FX_TEX_Triangle_02_1 is a 2x1 atlas: left frame is the
+            // base triangle, right frame is its vertical flip.
+            let frame = shard.textureFrame % 2
+            let uMin = Float(frame) * 0.5
+            let uMax = uMin + 0.5
+            let uvMin = SIMD2<Float>(uMin, 0)
+            let uvMax = SIMD2<Float>(uMax, 1)
             appendTexturedSprite(
                 center: shard.position,
                 size: size,
