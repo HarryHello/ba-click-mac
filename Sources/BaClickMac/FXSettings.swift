@@ -12,7 +12,7 @@ struct FXSettings: Codable {
     var clickBloomSigma: Float = 14.0
     // Trail HDR glow-source energy multiplier: this controls how strongly the
     // trail lights up the area around it.
-    var trailBloomStrength: Float = 4.0
+    var trailBloomStrength: Float = 6.0
     var trailBloomSigma: Float = 8.0
     // Game MXFinalBloom exposure. Original uses Intensity 1.7, which becomes
     // 2^(1.7/10)-1 = 0.125 in the composite.
@@ -27,10 +27,10 @@ struct FXSettings: Codable {
     var bloomThreshold: Float = 1.0
     // Falloff exponent for the glow overlay: ~1 is near-linear like the game's
 // additive composite (bright near, smooth decay); < 1 lifts the outer halo.
-    var bloomFalloff: Float = 0.9
+    var bloomFalloff: Float = 0.85
     // Extra brightness for the glow overlay (game additive is brighter than a
     // premultiplied transparent overlay can be, so we compensate).
-    var bloomBoost: Float = 1.5
+    var bloomBoost: Float = 3.0
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()

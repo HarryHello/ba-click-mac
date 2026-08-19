@@ -569,6 +569,12 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         let halfWidth = BAEffect.trail.width * settings.trailScale * scale * 0.5
         let materialIntensity = Renderer.trailMaterialIntensity
+        // Constant trail color: game tail stays the same blue, only gets
+        // thinner. Use the bright head color everywhere instead of the tail-fade.
+        let trailColor = Renderer.linearEnergy(
+            BAEval.color(BAEffect.trail.gradient, 0.98),
+            intensity: materialIntensity
+        )
 
         for i in 1..<points.count {
             let from = points[i - 1]
@@ -579,43 +585,32 @@ final class Renderer: NSObject, MTKViewDelegate {
 
             let tangent = delta / length
             let normal = SIMD2(-tangent.y, tangent.x)
-            let offset = normal * halfWidth
+
+            // Width tapers with age so the tail narrows and fades by shape,
+            // not by becoming transparent (which mixes with the background).
+            let fromAge = max(0, min(1, (now - from.time) / lifetime))
+            let toAge = max(0, min(1, (now - to.time) / lifetime))
+            let fromWidthFade = max(Float(1 - fromAge), 0)
+            let toWidthFade = max(Float(1 - toAge), 0)
+            if fromWidthFade < 0.02 && toWidthFade < 0.02 { continue }
+
+            let fromOffset = normal * halfWidth * fromWidthFade
+            let toOffset = normal * halfWidth * toWidthFade
 
             let fromProgress = distances[i - 1] / totalLength
             let toProgress = distances[i] / totalLength
-            let fromColor = Renderer.linearEnergy(
-                BAEval.color(BAEffect.trail.gradient, fromProgress),
-                intensity: materialIntensity
-            )
-            let toColor = Renderer.linearEnergy(
-                BAEval.color(BAEffect.trail.gradient, toProgress),
-                intensity: materialIntensity
-            )
-            let fromCoverage = BAEval.number(BAEffect.trail.coverageLongitudinalKeys, fromProgress)
-            let toCoverage = BAEval.number(BAEffect.trail.coverageLongitudinalKeys, toProgress)
-
-            // Age-based fade so the trail and its glow ease out after the
-            // cursor stops instead of popping away at the lifetime boundary.
-            let fromAge = max(0, min(1, (now - from.time) / lifetime))
-            let toAge = max(0, min(1, (now - to.time) / lifetime))
-            let fromFade = Float(1 - fromAge)
-            let toFade = Float(1 - toAge)
-            let fromAlpha = BAEffect.trail.trailOpacity * fromFade
-            let toAlpha = BAEffect.trail.trailOpacity * toFade
-            let fromCov = fromCoverage * fromFade
-            let toCov = toCoverage * toFade
-
             let uFrom = 1 - fromProgress
             let uTo = 1 - toProgress
 
-            let fromLeft = from.position + offset
-            let fromRight = from.position - offset
-            let toLeft = to.position + offset
-            let toRight = to.position - offset
-            let v0 = TexturedVertex(position: fromLeft, uv: SIMD2(uFrom, 1), color: fromColor, particleAlpha: fromAlpha, coverageFactor: fromCov)
-            let v1 = TexturedVertex(position: toLeft, uv: SIMD2(uTo, 1), color: toColor, particleAlpha: toAlpha, coverageFactor: toCov)
-            let v2 = TexturedVertex(position: toRight, uv: SIMD2(uTo, 0), color: toColor, particleAlpha: toAlpha, coverageFactor: toCov)
-            let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: fromColor, particleAlpha: fromAlpha, coverageFactor: fromCov)
+            let fromLeft = from.position + fromOffset
+            let fromRight = from.position - fromOffset
+            let toLeft = to.position + toOffset
+            let toRight = to.position - toOffset
+            // Color and opacity stay constant along the trail.
+            let v0 = TexturedVertex(position: fromLeft, uv: SIMD2(uFrom, 1), color: trailColor, particleAlpha: 1, coverageFactor: 1)
+            let v1 = TexturedVertex(position: toLeft, uv: SIMD2(uTo, 1), color: trailColor, particleAlpha: 1, coverageFactor: 1)
+            let v2 = TexturedVertex(position: toRight, uv: SIMD2(uTo, 0), color: trailColor, particleAlpha: 1, coverageFactor: 1)
+            let v3 = TexturedVertex(position: fromRight, uv: SIMD2(uFrom, 0), color: trailColor, particleAlpha: 1, coverageFactor: 1)
             vertices.append(contentsOf: [v0, v1, v2, v0, v2, v3])
         }
 
@@ -640,26 +635,25 @@ final class Renderer: NSObject, MTKViewDelegate {
         let neighbor = atEnd ? points[index - 1] : points[index + 1]
         let direction = simd_normalize(point.position - neighbor.position)
         let normal = SIMD2(-direction.y, direction.x)
-        let offset = normal * halfWidth
+
+        let age = max(0, min(1, (now - point.time) / lifetime))
+        let widthFade = max(Float(1 - age), 0)
+        let offset = normal * halfWidth * widthFade
         let forward: Float = atEnd ? 1 : -1
         let left = point.position + offset
         let right = point.position - offset
-        let tip = point.position + direction * halfWidth * forward
+        let tip = point.position + direction * halfWidth * widthFade * forward
 
-        let progress = (distances[index] ) / totalLength
+        let progress = distances[index] / totalLength
+        let u = 1 - progress
         let color = Renderer.linearEnergy(
-            BAEval.color(BAEffect.trail.gradient, progress),
+            BAEval.color(BAEffect.trail.gradient, 0.98),
             intensity: Renderer.trailMaterialIntensity
         )
-        let age = max(0, min(1, (now - point.time) / lifetime))
-        let fade = Float(1 - age)
-        let cov = BAEval.number(BAEffect.trail.coverageLongitudinalKeys, progress) * fade
-        let alpha = BAEffect.trail.trailOpacity * fade
-        let u = 1 - progress
 
-        let c0 = TexturedVertex(position: left, uv: SIMD2(u, 1), color: color, particleAlpha: alpha, coverageFactor: cov)
-        let c1 = TexturedVertex(position: tip, uv: SIMD2(u, 0.5), color: color, particleAlpha: alpha, coverageFactor: cov)
-        let c2 = TexturedVertex(position: right, uv: SIMD2(u, 0), color: color, particleAlpha: alpha, coverageFactor: cov)
+        let c0 = TexturedVertex(position: left, uv: SIMD2(u, 1), color: color, particleAlpha: 1, coverageFactor: 1)
+        let c1 = TexturedVertex(position: tip, uv: SIMD2(u, 0.5), color: color, particleAlpha: 1, coverageFactor: 1)
+        let c2 = TexturedVertex(position: right, uv: SIMD2(u, 0), color: color, particleAlpha: 1, coverageFactor: 1)
         vertices.append(contentsOf: [c0, c1, c2])
     }
 

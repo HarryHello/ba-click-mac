@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var renderer: Renderer?
     private var statusLabel: NSTextField?
     private var statusTimer: Timer?
+    private var spaceObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
@@ -59,12 +60,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = overlayView
         window.orderFrontRegardless()
 
-        // Re-apply transparency after the view is attached to the window; the
-        // CAMetalLayer can reset its opaque/background state during attach.
-        DispatchQueue.main.async { [weak overlayView] in
-            overlayView?.wantsLayer = true
-            overlayView?.layer?.isOpaque = false
-            overlayView?.layer?.backgroundColor = NSColor.clear.cgColor
+        self.reapplyTransparency()
+
+        // Some macOS Spaces switches demote or hide the overlay window even
+        // though it joins all spaces; re-assert ordering + transparency after
+        // every active-space change so the effect doesn't vanish.
+        self.spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                self.window?.level = .floating
+                self.window?.orderFrontRegardless()
+                self.reapplyTransparency()
+            }
         }
 
         // TEMP debug HUD: show bloom/settings/particle state on the overlay.
@@ -105,6 +116,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    /// Re-assert the CAMetalLayer transparency. The layer can reset its
+    /// opaque/background state when the view is re-attached after a Spaces
+    /// switch, which otherwise makes the overlay disappear.
+    private func reapplyTransparency() {
+        guard let view = window?.contentView else { return }
+        DispatchQueue.main.async {
+            view.wantsLayer = true
+            view.layer?.isOpaque = false
+            view.layer?.backgroundColor = NSColor.clear.cgColor
+        }
     }
 
     private func updateStatus() {
