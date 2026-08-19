@@ -65,8 +65,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var bloomDownTextures: [MTLTexture] = []
     private var bloomUpTextures: [MTLTexture] = []
     private var bloomLevelSizes: [CGSize] = []
-    private let bloomLevelCount = 4
+    private var bloomLevelCount: Int = 4
     private var sceneSize: CGSize = .zero
+    private weak var currentView: MTKView?
     private(set) var settings: FXSettings
     private var lastSettingsReload: TimeInterval = 0
 
@@ -210,6 +211,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         view.device = device
         view.delegate = self
+        currentView = view
         updateProjection(view: view)
     }
 
@@ -227,6 +229,13 @@ final class Renderer: NSObject, MTKViewDelegate {
             settings = FXSettings.load()
             particleSystem.ringScale = settings.ringScale
             particleSystem.shardScale = settings.shardScale
+            if settings.bloomLevels != bloomLevelCount {
+                bloomLevelCount = max(1, settings.bloomLevels)
+                sceneSize = .zero
+                if let view = currentView {
+                    updateProjection(view: view)
+                }
+            }
             lastSettingsReload = now
         }
 
@@ -766,6 +775,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         // Bloom is soft, so render it at half resolution to cut memory/GPU cost.
         let bloomWidth = max(1, Int(pixelSize.width * 0.5))
         let bloomHeight = max(1, Int(pixelSize.height * 0.5))
+        bloomLevelCount = max(1, settings.bloomLevels)
 
         if hdrSceneTexture != nil && !bloomDownTextures.isEmpty &&
             sceneSize.width == CGFloat(bloomWidth) && sceneSize.height == CGFloat(bloomHeight) {

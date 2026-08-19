@@ -17,7 +17,9 @@ struct FXSettings: Codable {
     var trailBloomStrength: Float = 2.0
     var trailBloomSigma: Float = 8.0
     // Unified MXFinalBloom intensity used by the multi-level bloom path.
-    var bloomStrength: Float = 2.0
+    var bloomStrength: Float = 1.2
+    // Number of pyramid levels: more levels = wider glow.
+    var bloomLevels: Int = 6
     // >1 makes the glow peak brighter and fall off faster around the edges.
     var bloomFalloff: Float = 2.0
 

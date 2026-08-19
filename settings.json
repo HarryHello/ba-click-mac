@@ -7,6 +7,7 @@
   "clickBloomSigma": 14.0,
   "trailBloomStrength": 2.0,
   "trailBloomSigma": 8.0,
-  "bloomStrength": 2.0,
+  "bloomStrength": 1.2,
+  "bloomLevels": 6,
   "bloomFalloff": 2.0
 }
