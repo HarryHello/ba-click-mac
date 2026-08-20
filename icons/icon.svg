@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_圖層_1" data-name="圖層_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1024 1024">
+  <!-- Generator: Adobe Illustrator 30.7.0, SVG Export Plug-In . SVG Version: 2.1.4 Build 114)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #379bcc;
+        opacity: .81;
+      }
+
+      .st1 {
+        fill: #60a5fa;
+      }
+
+      .st2 {
+        fill: #55b7e6;
+        opacity: .67;
+      }
+
+      .st3 {
+        fill: #3b82f6;
+      }
+
+      .st4 {
+        fill: #7dd3fc;
+      }
+
+      .st5 {
+        fill: #58b3e0;
+        opacity: .53;
+      }
+
+      .st6 {
+        opacity: .89;
+        stroke: #53a6cf;
+        stroke-width: 50px;
+      }
+
+      .st6, .st7 {
+        fill: none;
+        stroke-linecap: square;
+      }
+
+      .st8 {
+        fill: #1a1a1a;
+      }
+
+      .st9 {
+        fill: #2ba4e0;
+        opacity: .72;
+      }
+
+      .st7 {
+        opacity: .83;
+        stroke: #94ceeb;
+        stroke-width: 58px;
+      }
+    </style>
+  </defs>
+  <rect class="st8" width="1024" height="1024"/>
+  <polygon class="st3" points="230 193 175 288 285 288 230 193"/>
+  <polygon class="st1" points="840 236.5 790 149.5 890 149.5 840 236.5"/>
+  <polygon class="st4" points="184.76 732 124.76 836 244.76 836 184.76 732"/>
+  <polygon class="st2" points="480 141 435 219 525 219 480 141"/>
+  <circle class="st0" cx="512" cy="512" r="54.71"/>
+  <path class="st6" d="M599.78,793.91c-27.73,8.62-57.21,13.27-87.78,13.27-163.02,0-295.18-132.16-295.18-295.18,0-21.92,2.39-43.28,6.92-63.83"/>
+  <path class="st7" d="M389.35,162c38.39-13.45,79.67-20.77,122.65-20.77,204.77,0,370.77,166,370.77,370.77,0,178.58-126.25,327.67-294.37,362.89"/>
+  <polygon class="st9" points="824 931 714 741 934 741 824 931"/>
+  <polygon class="st5" points="824 551.83 720.05 732 927.95 732 824 551.83"/>
+</svg>

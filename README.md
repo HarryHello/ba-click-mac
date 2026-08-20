@@ -34,6 +34,7 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - ✅ Manual 60 fps render loop (display-link stalls fixed) / 手动 60fps 渲染循环（修复 display link 停滞）
 - ✅ Idle power saving (render stops when nothing is on screen) / 闲置省电（无内容时停止渲染）
 - ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`) / 单元测试 + CI
+- ✅ App icon (Dock) + menu bar icon (status item) / 应用图标（Dock）+ 菜单栏图标
 - ⏳ Multi-monitor (currently only the main screen) / 多显示器（目前仅主屏幕）
 - ⏳ Control panel / tray icon / 控制面板 / 托盘图标
 
@@ -59,8 +60,8 @@ Or build a double-clickable app bundle / 或构建可双击的 .app 包:
 open build/BaClickMac.app
 ```
 
-Quit / 退出: the app shows in the Dock (`.regular` activation policy) — use the Dock icon → **Quit BaClickMac** (`Cmd+Q`), or `pkill BaClickMac` from the terminal.
-应用显示在 Dock（`.regular` 激活策略）——用 Dock 图标 → **Quit BaClickMac**（`Cmd+Q`），或终端 `pkill BaClickMac`。
+Quit / 退出: the app shows in the Dock (`.regular` activation policy) and adds a **menu bar icon** — use the Dock icon, the menu bar icon, **Quit BaClickMac** (`Cmd+Q`), or `pkill BaClickMac` from the terminal.
+应用显示在 Dock（`.regular` 激活策略），并在菜单栏添加图标——用 Dock 图标、菜单栏图标、**Quit BaClickMac**（`Cmd+Q`），或终端 `pkill BaClickMac` 退出。
 
 ### Isolated click testing / 单独测试点击特效
 
@@ -134,6 +135,14 @@ Sources/BaClickMac/
   FXSettings.swift           settings.json loading / defaults (lenient decode)
   BAEffectData.swift         Unity keyframes / game-derived values
   DebugLog.swift             stderr logging + bail() helper
+  ResourceLocator.swift      Shared bundled-resource lookup
+Resources/
+  AppIcon.icns               macOS app icon (used by the .app bundle)
+  icon.png                   App icon bitmap (Dock icon for the raw binary)
+  bar_icon_22/44.png         Menu bar icon (1x / 2x template)
+  circle/ring/trail/triangle  Game-derived effect textures
+icons/
+  icon.svg / bar_icon.svg    Icon sources (for regenerating the PNGs/ICNS)
 Tests/
   main.swift                 Unit tests: BAEval / ParticleSystem / FXSettings
 .github/workflows/build.yml  CI: build + unit tests on macOS

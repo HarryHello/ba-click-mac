@@ -42,6 +42,8 @@ if [ "$MODE" = "--app" ]; then
     <string>local.ba-click-mac</string>
     <key>CFBundleName</key>
     <string>BaClickMac</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

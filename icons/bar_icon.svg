@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_圖層_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1024 1024">
+  <!-- Generator: Adobe Illustrator 30.7.0, SVG Export Plug-In . SVG Version: 2.1.4 Build 114)  -->
+  <defs>
+    <style>
+      .st0 {
+        stroke-width: 80px;
+      }
+
+      .st0, .st1 {
+        fill: none;
+        stroke: #000;
+        stroke-linecap: square;
+      }
+
+      .st0, .st1, .st2 {
+        isolation: isolate;
+      }
+
+      .st1 {
+        stroke-width: 90px;
+      }
+    </style>
+  </defs>
+  <polygon points="133.67 82.77 46.72 232.96 220.62 232.96 133.67 82.77"/>
+  <polygon points="879.53 200.88 782.92 32.77 976.14 32.77 879.53 200.88"/>
+  <polygon points="104.24 807.95 12.8 966.43 195.67 966.43 104.24 807.95"/>
+  <circle class="st2" cx="513.2" cy="483.85" r="85.07"/>
+  <path class="st0" d="M605.43,851.41c-33.9,10.54-69.94,16.22-107.31,16.22-199.29,0-360.85-161.56-360.85-360.85,0-26.8,2.92-52.91,8.46-78.03"/>
+  <path class="st1" d="M348.19,78.93c46.93-16.44,97.39-25.39,149.93-25.39,250.32,0,453.25,202.93,453.25,453.25,0,218.31-154.34,400.56-359.86,443.62"/>
+  <polygon class="st2" points="879.53 1019 745.06 786.73 1014 786.73 879.53 1019"/>
+  <polygon class="st2" points="879.53 555.48 752.45 775.73 1006.6 775.73 879.53 555.48"/>
+</svg>

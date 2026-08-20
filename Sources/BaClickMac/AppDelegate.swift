@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusTimer: Timer?
     private var spaceObserver: NSObjectProtocol?
     private var clickLoopTimer: Timer?
+    /// Menu bar (status) item so the overlay can be quit without the Dock.
+    private var statusItem: NSStatusItem?
     /// Manual 60fps render loop. We drive MTKView.draw() ourselves instead of
     /// relying on the MTKView display link, which macOS randomly stalls after
     /// Space/fullscreen transitions — that made the effect appear "randomly".
@@ -30,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
+        setupStatusItem()
+        setupAppIcon()
 
         guard let screen = NSScreen.main ?? NSScreen.screens.first else {
             bail("No screen available")
@@ -360,5 +364,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         appMenuItem.submenu = appMenu
         NSApp.mainMenu = mainMenu
+    }
+
+    /// Menu bar (status) icon using the Blue Archive bar icon. Gives a quick
+    /// way to quit the overlay from the top bar.
+    private func setupStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = item.button {
+            let image = NSImage(size: NSSize(width: 22, height: 22))
+            // 22px = 1x, 44px = 2x at 22pt.
+            if let rep = loadIcon(name: "bar_icon_22")?.representations.first {
+                rep.size = NSSize(width: 22, height: 22)
+                image.addRepresentation(rep)
+            }
+            if let rep = loadIcon(name: "bar_icon_44")?.representations.first {
+                rep.size = NSSize(width: 22, height: 22)
+                image.addRepresentation(rep)
+            }
+            image.isTemplate = true
+            button.image = image
+        }
+        let menu = NSMenu()
+        menu.addItem(
+            withTitle: "Quit BaClickMac",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        item.menu = menu
+        statusItem = item
+    }
+
+    private func loadIcon(name: String) -> NSImage? {
+        guard let url = findResourceURL(name: name, ext: "png") else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
+    /// Dock icon: load the Blue Archive app icon (also covers the raw binary
+    /// run via run.sh, which has no bundle icon).
+    private func setupAppIcon() {
+        guard let url = findResourceURL(name: "icon", ext: "png"),
+              let image = NSImage(contentsOf: url) else { return }
+        NSApp.applicationIconImage = image
     }
 }
