@@ -29,8 +29,9 @@ enum L10n {
         "trailGlow": ("尾迹辉光亮度", "Trail Glow Brightness"),
         "clickSize": ("点击效果大小", "Click Effect Size"),
         "clickBrightness": ("点击效果亮度", "Click Brightness"),
-        "clickDiskOpacity": ("点击圆盘透明度", "Click Disk Opacity"),
-        "triangleOpacity": ("三角粒子透明度", "Triangle Opacity"),
+        // 不透明度: higher value = more opaque (matches the 0...1 slider logic).
+        "clickDiskOpacity": ("点击圆盘不透明度", "Click Disk Opacity"),
+        "triangleOpacity": ("三角粒子不透明度", "Triangle Opacity"),
         "refreshRate": ("效果刷新率", "Refresh Rate"),
 
         // Menu bar

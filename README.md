@@ -113,8 +113,8 @@ The app loads `settings.json` from the **current working directory**, the **exec
 | `enabled` | `true` | Master effect switch / 效果总开关 |
 | `trailAlwaysVisible` | `true` | Trail on any mouse move; `false` = only while left-dragging / 尾迹始终显示；`false` = 仅左键拖动时 |
 | `clickBrightness` | `1.0` | Click effect brightness / 点击效果亮度 |
-| `clickDiskOpacity` | `1.0` | Click disk opacity / 点击圆盘透明度 |
-| `triangleOpacity` | `1.0` | Triangle particle opacity / 三角粒子透明度 |
+| `clickDiskOpacity` | `1.0` | Click disk opacity (higher = more opaque) / 点击圆盘不透明度（越高越实） |
+| `triangleOpacity` | `1.0` | Triangle particle opacity (higher = more opaque) / 三角粒子不透明度（越高越实） |
 | `refreshRate` | `60` | Render refresh rate (30/60/120/240) / 渲染刷新率 |
 
 > **Launch at login / 开机自启** is not persisted in `settings.json` — it's a system LaunchAgent state toggled by the panel's 开机自启 switch.
