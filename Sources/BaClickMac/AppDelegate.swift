@@ -15,10 +15,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Menu bar (status) item so the overlay can be quit without the Dock.
     private var statusItem: NSStatusItem?
     private var openMenuItem: NSMenuItem?
-    /// Manual 60fps render loop. We drive MTKView.draw() ourselves instead of
-    /// relying on the MTKView display link, which macOS randomly stalls after
-    /// Space/fullscreen transitions — that made the effect appear "randomly".
+    /// Manual render loop driver: CADisplayLink (vsync-synced, macOS 14+) or a
+    /// fallback Timer. We call MTKView.draw() ourselves so rendering never
+    /// depends on the MTKView's own (fragile) display-link lifecycle.
     private var renderTimer: Timer?
+    private var renderDisplayLink: CADisplayLink?
+    /// Main screen frame, used to convert global mouse coords to overlay coords.
+    private var screenFrame: NSRect = .zero
     /// Prevents App Nap from throttling the render timer while we are a
     /// non-activating background overlay.
     private var activityToken: NSObjectProtocol?
@@ -45,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let frame = screen.frame
+        screenFrame = frame
 
         // Single persistent NSPanel (the configuration that actually works).
         // Being a fullScreenAuxiliary panel means macOS carries it INTO the
@@ -272,49 +276,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if fullscreenHidden { return }
         // If we intentionally stopped rendering while idle (see
         // startRenderTimer), that's not a stall either.
-        guard renderTimer != nil else { return }
+        guard renderTimer != nil || renderDisplayLink != nil else { return }
         let now = CACurrentMediaTime()
         if renderer.lastDrawTime == 0 || now - renderer.lastDrawTime > Self.stallThreshold {
-            overlayView.draw() // force one frame now instead of waiting a tick
+            // The driver may have stalled (e.g. display link after a Space
+            // switch): rebuild it and force a frame now.
+            stopRenderTimer()
+            startRenderTimer()
+            overlayView.draw()
             overlayView.window?.orderFrontRegardless()
             reapplyTransparency()
         }
     }
 
     /// Start the manual render loop at the configured refresh rate
-    /// (idempotent). The MTKView's own display link stays paused; we call
-    /// draw() ourselves so rendering never depends on AppKit's fragile
-    /// display-link lifecycle.
+    /// (idempotent). Uses a vsync-synced CADisplayLink on macOS 14+ (smooth,
+    /// no frame-phase jitter), falling back to a Timer on macOS 13. The MTKView
+    /// keeps its own display link paused; we call draw() ourselves so rendering
+    /// never depends on the MTKView's fragile display-link lifecycle.
     ///
     /// Power saving: the loop stops itself as soon as nothing is on screen
     /// (idle -> zero GPU work). Clicks / mouse moves / the click-loop wake it
     /// up again.
     private func startRenderTimer() {
-        guard renderTimer == nil, let overlayView else { return }
+        guard renderTimer == nil, renderDisplayLink == nil, let overlayView else { return }
         overlayView.isPaused = true
-        let timer = Timer(timeInterval: currentRenderInterval, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.overlayView?.draw()
-            // Nothing left on screen -> stop until the next interaction.
-            if !(self.renderer?.particleSystem.hasActiveParticles() ?? false) {
-                self.stopRenderTimer()
+        if #available(macOS 14.0, *) {
+            let link = overlayView.displayLink(target: self, selector: #selector(renderTick))
+            link.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
+            link.add(to: .main, forMode: .common)
+            renderDisplayLink = link
+        } else {
+            let timer = Timer(timeInterval: currentRenderInterval, repeats: true) { [weak self] _ in
+                self?.renderTick()
             }
+            RunLoop.main.add(timer, forMode: .common)
+            renderTimer = timer
         }
-        RunLoop.main.add(timer, forMode: .common)
-        renderTimer = timer
     }
 
     private func stopRenderTimer() {
         renderTimer?.invalidate()
         renderTimer = nil
+        renderDisplayLink?.invalidate()
+        renderDisplayLink = nil
     }
 
-    /// Restart the render timer if the effect refresh rate changed while it is
-    /// running (idle-stopped timers pick up the new rate on their next wake).
+    @available(macOS 14.0, *)
+    private func frameRateRange(for rate: Int) -> CAFrameRateRange {
+        CAFrameRateRange(minimum: 24, maximum: 240, preferred: Float(max(1, rate)))
+    }
+
+    /// One render tick (called by the display link / fallback timer).
+    ///
+    /// Samples the live mouse position every frame so the trail stays dense
+    /// (smooth curves, no polylines) even when the OS coalesces mouse-moved
+    /// events while the main thread is busy rendering.
+    @objc private func renderTick() {
+        guard let overlayView, let renderer else { return }
+        if store.model.enabled {
+            let dragging = (NSEvent.pressedMouseButtons & 1) != 0
+            if store.model.trailAlwaysVisible || dragging {
+                renderer.particleSystem.addTrailPoint(at: convertScreen(NSEvent.mouseLocation))
+            }
+        }
+        overlayView.draw()
+        // Nothing left on screen -> stop until the next interaction.
+        if !renderer.particleSystem.hasActiveParticles() {
+            stopRenderTimer()
+        }
+    }
+
+    private func convertScreen(_ point: NSPoint) -> SIMD2<Float> {
+        SIMD2(
+            Float(point.x - screenFrame.origin.x),
+            Float(point.y - screenFrame.origin.y)
+        )
+    }
+
+    /// Update the driver if the effect refresh rate changed while it is
+    /// running (idle-stopped drivers pick up the new rate on their next wake).
     private func syncRenderTimer() {
         let interval = 1.0 / Double(max(1, store.model.refreshRate))
         if abs(interval - currentRenderInterval) > 0.0001 {
             currentRenderInterval = interval
+            if #available(macOS 14.0, *) {
+                renderDisplayLink?.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
+            }
             if renderTimer != nil {
                 stopRenderTimer()
                 startRenderTimer()
