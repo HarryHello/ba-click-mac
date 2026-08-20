@@ -11,8 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build
+      - name: Build binary
         run: ./build.sh
 
       - name: Unit tests
         run: ./test.sh
+
+      - name: Build app bundle
+        run: ./build.sh --app

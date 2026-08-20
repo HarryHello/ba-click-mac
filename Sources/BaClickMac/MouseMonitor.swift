@@ -10,19 +10,14 @@ final class MouseMonitor {
     /// Plain mouse move, no button (feeds the trail only when "always visible").
     var onMouseMove: ((SIMD2<Float>) -> Void)?
 
-    private let screenFrame: NSRect
     private var monitor: Any?
-
-    init(screenFrame: NSRect) {
-        self.screenFrame = screenFrame
-    }
 
     func start() {
         monitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseDragged, .mouseMoved]
         ) { [weak self] event in
             guard let self else { return }
-            let point = self.convert(NSEvent.mouseLocation)
+            let point = ScreenGeometry.shared.convert(NSEvent.mouseLocation)
             switch event.type {
             case .leftMouseDown:
                 self.onMouseDown?(point)
@@ -40,12 +35,5 @@ final class MouseMonitor {
         if let monitor {
             NSEvent.removeMonitor(monitor)
         }
-    }
-
-    private func convert(_ point: NSPoint) -> SIMD2<Float> {
-        SIMD2(
-            Float(point.x - screenFrame.origin.x),
-            Float(point.y - screenFrame.origin.y)
-        )
     }
 }

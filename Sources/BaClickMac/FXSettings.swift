@@ -100,14 +100,18 @@ struct FXSettings: Codable {
         refreshRate = try c.decodeIfPresent(Int.self, forKey: .refreshRate) ?? Self.defaultRefreshRate
     }
 
-    static let knownKeys: Set<String> = [
-        "diskScale", "ringScale", "shardScale", "trailScale",
-        "showInFullscreen", "clickBloomStrength", "trailBloomStrength",
-        "bloomStrength", "bloomLevels", "bloomDiffusion", "bloomThreshold",
-        "bloomFalloff", "bloomBoost",
-        "enabled", "trailAlwaysVisible", "clickBrightness",
-        "clickDiskOpacity", "triangleOpacity", "refreshRate",
-    ]
+    /// Coding keys double as the single source for the "known keys" set used by
+    /// unknown-key warnings, so adding a field can't leave the list stale.
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+        case diskScale, ringScale, shardScale, trailScale, showInFullscreen
+        case clickBloomStrength, trailBloomStrength
+        case bloomStrength, bloomLevels, bloomDiffusion, bloomThreshold
+        case bloomFalloff, bloomBoost
+        case enabled, trailAlwaysVisible, clickBrightness
+        case clickDiskOpacity, triangleOpacity, refreshRate
+    }
+
+    static let knownKeys: Set<String> = Set(CodingKeys.allCases.map(\.rawValue))
 
     static func load() -> FXSettings {
         let candidates = FXSettings.candidateURLs()

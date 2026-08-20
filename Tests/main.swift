@@ -78,6 +78,54 @@ func testParticleSystem() {
     expect(ps2.trail.count == 1, "identical trail points deduped")
     ps2.addTrailPoint(at: SIMD2(0, 100))
     expect(ps2.trail.count == 2, "distant trail point added")
+
+    // clear() drops bursts, shards and trail immediately.
+    let ps3 = ParticleSystem()
+    ps3.setViewportHeight(1080)
+    ps3.addClick(at: SIMD2(50, 50))
+    ps3.addTrailPoint(at: SIMD2(10, 10))
+    ps3.addTrailPoint(at: SIMD2(20, 10))
+    ps3.update(now: 1000)
+    expect(ps3.hasActiveParticles(), "system active before clear")
+    ps3.clear()
+    expect(ps3.bursts.isEmpty && ps3.shards.isEmpty && ps3.trail.isEmpty, "clear empties everything")
+    expect(!ps3.hasActiveParticles(), "inactive after clear")
+}
+
+// MARK: - SettingsStore
+
+func testSettingsStore() {
+    let tmp = FileManager.default.temporaryDirectory
+        .appendingPathComponent("baclick-store-\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+    let oldCwd = FileManager.default.currentDirectoryPath
+    defer {
+        FileManager.default.changeCurrentDirectoryPath(oldCwd)
+        try? FileManager.default.removeItem(at: tmp)
+    }
+    FileManager.default.changeCurrentDirectoryPath(tmp.path)
+
+    let store = SettingsStore()
+
+    // binding writes through to the model.
+    store.binding(\.trailScale).wrappedValue = 5.5
+    expect(store.model.trailScale == 5.5, "binding updates model")
+
+    // clickScaleBinding writes disk/ring/shard together.
+    store.clickScaleBinding().wrappedValue = 1.25
+    expect(store.model.diskScale == 1.25, "clickScale sets diskScale")
+    expect(store.model.ringScale == 1.25, "clickScale sets ringScale")
+    expect(store.model.shardScale == 1.25, "clickScale sets shardScale")
+
+    // persist writes JSON to the cwd settings.json (persistURL picks it).
+    try? "{}".write(to: tmp.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
+    store.persist()
+    guard let data = try? Data(contentsOf: tmp.appendingPathComponent("settings.json")),
+          let roundtrip = try? JSONDecoder().decode(FXSettings.self, from: data) else {
+        expect(false, "persist wrote readable JSON")
+        return
+    }
+    expect(roundtrip.trailScale == 5.5, "persisted trailScale round-trips")
 }
 
 // MARK: - L10n
@@ -139,12 +187,21 @@ func testFXSettings() {
     try? "{not json".write(to: settingsURL, atomically: true, encoding: .utf8)
     let loaded3 = FXSettings.load()
     expect(loaded3.trailScale == 2.2, "invalid JSON falls back to defaults")
+
+    // persistURL prefers an existing cwd settings.json. (Build the expected URL
+    // the same way persistURL does — the cwd is /private/var/... while the
+    // temp dir URL is /var/..., so a direct string comparison would differ.)
+    try? "{}".write(to: settingsURL, atomically: true, encoding: .utf8)
+    let expectedCwdURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("settings.json")
+    expect(FXSettings.persistURL() == expectedCwdURL, "persistURL prefers existing cwd file")
 }
 
 testBAEval()
 testParticleSystem()
 testFXSettings()
 testL10n()
+testSettingsStore()
 
 print("passed: \(passed), failed: \(failures)")
 if failures > 0 {

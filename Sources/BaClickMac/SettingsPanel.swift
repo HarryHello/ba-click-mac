@@ -52,13 +52,14 @@ struct SettingsPanelView: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
         .padding(.top, 30) // clear the native traffic lights (fullSizeContentView)
-        .frame(width: 330)
+        .frame(width: 360)
     }
 
     private func slider(_ title: String, value: Binding<Float>, range: ClosedRange<Float>) -> some View {
         HStack {
             Text(title)
-                .frame(width: 120, alignment: .leading)
+                .frame(width: 150, alignment: .leading)
+                .lineLimit(1)
             Slider(value: value, in: range)
                 .controlSize(.small)
         }
@@ -72,6 +73,12 @@ struct SettingsPanelView: View {
 /// non-activating, so the app never becomes frontmost and the global mouse
 /// monitor keeps feeding the overlay while the panel is used.
 final class SettingsPanelController: NSObject {
+    /// Panel window level: below the effect overlay (`NSWindow.Level.floating`)
+    /// so effects render on top, but above normal app windows (level 0).
+    /// normal = 0, floating = 3.
+    private static let panelWindowLevel = NSWindow.Level(rawValue: 2)
+    private static let minPanelWidth: CGFloat = 360
+
     private let store: SettingsStore
     private var panel: NSPanel?
     private let cornerRadius: CGFloat = 14
@@ -83,7 +90,7 @@ final class SettingsPanelController: NSObject {
         let hosting = NSHostingView(rootView: SettingsPanelView(store: store))
         let contentFitting = hosting.fittingSize
         let size = NSSize(
-            width: max(330, contentFitting.width),
+            width: max(Self.minPanelWidth, contentFitting.width),
             height: contentFitting.height + 10
         )
         let contentRect = NSRect(x: 0, y: 0, width: size.width, height: size.height)
@@ -103,10 +110,7 @@ final class SettingsPanelController: NSObject {
         panel.isFloatingPanel = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
-        // Keep the panel BELOW the effect overlay (which is `.floating`) so the
-        // click effects render ON TOP of the panel, while still floating above
-        // normal app windows. (normal = 0, floating = 3)
-        panel.level = NSWindow.Level(rawValue: 2)
+        panel.level = Self.panelWindowLevel
         panel.collectionBehavior = [.moveToActiveSpace]
         panel.isReleasedWhenClosed = false
         panel.appearance = NSAppearance(named: .darkAqua)
@@ -169,10 +173,6 @@ final class SettingsPanelController: NSObject {
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
-
-    func toggle() {
-        isVisible ? close() : show()
-    }
 
     func show() {
         guard let panel else { return }

@@ -51,10 +51,11 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 
 ## Requirements / 环境要求
 
-- macOS 13+ (see `Package.swift` → `.macOS(.v13)`)
+- macOS 13+ (built with `./build.sh`; macOS 14+ enables the vsync render driver, macOS 26+ the native liquid-glass panel)
 - Xcode Command Line Tools or Xcode (Swift toolchain)
 - A Metal-capable Mac (any Apple Silicon, most Intel Macs)
 - 需要 Metal 支持的 Mac（Apple Silicon 或大部分 Intel Mac）
+- `build.sh` is the single build entry (binary, or `--app` for the .app bundle); there is no SPM `Package.swift` — `test.sh` builds the unit-test harness directly.
 
 ## Build, run & test / 构建、运行与测试
 
@@ -125,6 +126,26 @@ The app loads `settings.json` from the **current working directory**, the **exec
 >
 > `settings.json` is **git-ignored** (personal tuning stays local); commit changes to `settings.example.json` instead.
 > `settings.json` 已被 **git 忽略**（个人调参留在本地）；如需提交参数，请改 `settings.example.json`。
+
+## Adding a setting / 新增一个设置项
+
+Every runtime setting touches the same places — keep them in sync:
+
+1. **`FXSettings`** (`Sources/BaClickMac/FXSettings.swift`): add the property, a
+   `defaultXxx` constant, wire it in `init()` and `init(from:)`. `CodingKeys`
+   is `CaseIterable`, so the "known keys" warning list stays in sync
+   automatically — no manual list edit.
+2. **Panel control** (`Sources/BaClickMac/SettingsPanel.swift`): bind it via
+   `store.binding(\\.field)` (or `clickScaleBinding()` for the unified size
+   slider).
+3. **Apply it**: the renderer reads `settings.field` (synced by
+   `Renderer.applySettings`); panel-gating logic (e.g. trail mode) lives in
+   `AppDelegate`.
+4. **L10n** (`Sources/BaClickMac/L10n.swift`): add a `"key": (zh, en)` entry if
+   the label is user-facing.
+5. **Docs**: `settings.example.json` + this README table.
+6. **Tests**: `Tests/main.swift` — assert the new default + (if relevant) the
+   persist round-trip.
 
 ## How it works / 工作原理
 

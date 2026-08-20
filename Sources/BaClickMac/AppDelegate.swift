@@ -19,8 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// depends on the MTKView's own (fragile) display-link lifecycle.
     private var renderTimer: Timer?
     private var renderDisplayLink: CADisplayLink?
-    /// Main screen frame, used to convert global mouse coords to overlay coords.
-    private var screenFrame: NSRect = .zero
     /// Prevents App Nap from throttling the render timer while we are a
     /// non-activating background overlay.
     private var activityToken: NSObjectProtocol?
@@ -39,7 +37,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let stallThreshold: TimeInterval = 0.5
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        buildMenu()
         setupStatusItem()
 
         guard let screen = NSScreen.main ?? NSScreen.screens.first else {
@@ -47,7 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let frame = screen.frame
-        screenFrame = frame
 
         // Single persistent NSPanel (the configuration that actually works).
         // Being a fullScreenAuxiliary panel means macOS carries it INTO the
@@ -137,6 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let recover: (Notification) -> Void = { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
+                // Display layout may have changed: re-read the screen frame.
+                ScreenGeometry.shared.refresh()
                 // Don't fight the intentional hide used for fullscreen apps.
                 guard !self.fullscreenHidden else { return }
                 self.startRenderTimer()
@@ -203,23 +201,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Capture global mouse events. The overlay itself ignores mouse events,
         // so we observe them system-wide and feed the effect manually.
-        let monitor = MouseMonitor(screenFrame: frame)
+        //
+        // The event callbacks only WAKE the render loop; the actual trail
+        // sampling happens every render tick (renderTick) so the trail stays
+        // dense even when events are coalesced. The click still feeds directly.
+        let monitor = MouseMonitor()
         monitor.onMouseDown = { [weak renderer, weak self] point in
             guard let self, self.store.model.enabled else { return }
             self.startRenderTimer() // wake the idle-stopped render loop
             renderer?.particleSystem.addClick(at: point)
         }
-        monitor.onMouseDrag = { [weak renderer, weak self] point in
+        monitor.onMouseDrag = { [weak self] _ in
             guard let self, self.store.model.enabled else { return }
             self.startRenderTimer()
-            renderer?.particleSystem.addTrailPoint(at: point)
         }
-        monitor.onMouseMove = { [weak renderer, weak self] point in
-            // Trail only follows a free mouse move when "always visible" is on;
-            // dragging (left button held) always draws it.
+        monitor.onMouseMove = { [weak self] _ in
+            // Trail follows a free move only when "always visible" is on;
+            // dragging (left button held) always wakes it.
             guard let self, self.store.model.enabled, self.store.model.trailAlwaysVisible else { return }
             self.startRenderTimer()
-            renderer?.particleSystem.addTrailPoint(at: point)
         }
         monitor.start()
         mouseMonitor = monitor
@@ -245,10 +245,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // frontmost, AppKit's global mouse monitor stops receiving clicks from
         // our own app and the effect appears dead until the user focuses
         // another application.
-    }
-
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        false
     }
 
     /// Re-assert the CAMetalLayer transparency. The layer can reset its
@@ -336,7 +332,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if store.model.enabled {
             let dragging = (NSEvent.pressedMouseButtons & 1) != 0
             if store.model.trailAlwaysVisible || dragging {
-                renderer.particleSystem.addTrailPoint(at: convertScreen(NSEvent.mouseLocation))
+                renderer.particleSystem.addTrailPoint(
+                    at: ScreenGeometry.shared.convert(NSEvent.mouseLocation)
+                )
             }
         }
         overlayView.draw()
@@ -344,13 +342,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !renderer.particleSystem.hasActiveParticles() {
             stopRenderTimer()
         }
-    }
-
-    private func convertScreen(_ point: NSPoint) -> SIMD2<Float> {
-        SIMD2(
-            Float(point.x - screenFrame.origin.x),
-            Float(point.y - screenFrame.origin.y)
-        )
     }
 
     /// Update the driver if the effect refresh rate changed while it is
@@ -377,11 +368,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///    rendering so no GPU work happens behind it; resume on desktop.
     private func updateFullscreenState() {
         guard let renderer else { return }
+        // When we always keep the overlay over fullscreen apps (the default),
+        // there is nothing to hide or resume — skip the window-list polling.
+        if renderer.settings.showInFullscreen { return }
         let fullscreen = isFullscreenAppActive()
         if fullscreen == lastFullscreenState { return }
         lastFullscreenState = fullscreen
 
-        if fullscreen && !renderer.settings.showInFullscreen {
+        if fullscreen {
             fullscreenHidden = true
             stopRenderTimer()
             window?.orderOut(nil)
@@ -440,20 +434,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             renderer.particleSystem.shards.count,
             renderer.particleSystem.trail.count
         )
-    }
-
-    private func buildMenu() {
-        let mainMenu = NSMenu()
-        let appMenuItem = NSMenuItem()
-        mainMenu.addItem(appMenuItem)
-        let appMenu = NSMenu()
-        appMenu.addItem(
-            withTitle: L10n.t("quit"),
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        appMenuItem.submenu = appMenu
-        NSApp.mainMenu = mainMenu
     }
 
     /// Menu bar (status) icon using the Blue Archive bar icon.

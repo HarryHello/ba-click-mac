@@ -13,10 +13,19 @@ final class SettingsStore: ObservableObject {
     /// plist), NOT persisted in settings.json; the toggle writes it through.
     @Published var launchAtLogin: Bool {
         didSet {
-            guard launchAtLogin != oldValue else { return }
-            LoginItem.setEnabled(launchAtLogin)
+            guard launchAtLogin != oldValue, !isSettingLaunchAtLogin else { return }
+            isSettingLaunchAtLogin = true
+            defer { isSettingLaunchAtLogin = false }
+            if !LoginItem.setEnabled(launchAtLogin) {
+                // Registration failed (e.g. unwritable path): revert the switch
+                // so the UI doesn't claim a state the system doesn't have.
+                launchAtLogin = oldValue
+                dlog("[login] failed to change launch-at-login")
+            }
         }
     }
+
+    private var isSettingLaunchAtLogin = false
 
     /// Called on the main thread after any setting changed, so the app can
     /// apply it to the renderer / restart the render timer.
@@ -97,7 +106,8 @@ enum LoginItem {
         FileManager.default.fileExists(atPath: plistURL.path)
     }
 
-    static func setEnabled(_ enabled: Bool) {
+    /// Returns true on success (plist written + launchctl accepted).
+    static func setEnabled(_ enabled: Bool) -> Bool {
         enabled ? enable() : disable()
     }
 
@@ -109,7 +119,7 @@ enum LoginItem {
             .resolvingSymlinksInPath().path
     }
 
-    private static func enable() {
+    private static func enable() -> Bool {
         let plist: [String: Any] = [
             "Label": label,
             "ProgramArguments": [executablePath()],
@@ -117,7 +127,7 @@ enum LoginItem {
         ]
         guard let data = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else {
             dlog("[login] failed to serialize LaunchAgent plist")
-            return
+            return false
         }
         do {
             try FileManager.default.createDirectory(
@@ -127,25 +137,35 @@ enum LoginItem {
             try data.write(to: plistURL)
         } catch {
             dlog("[login] could not write \(plistURL.path): \(error)")
-            return
+            return false
         }
-        runLaunchCtl("bootstrap", "gui/\(getuid())", plistURL.path)
+        return runLaunchCtl("bootstrap", "gui/\(getuid())", plistURL.path)
     }
 
-    private static func disable() {
-        runLaunchCtl("bootout", "gui/\(getuid())/\(label)")
-        try? FileManager.default.removeItem(at: plistURL)
+    private static func disable() -> Bool {
+        _ = runLaunchCtl("bootout", "gui/\(getuid())/\(label)")
+        do {
+            if FileManager.default.fileExists(atPath: plistURL.path) {
+                try FileManager.default.removeItem(at: plistURL)
+            }
+            return true
+        } catch {
+            dlog("[login] could not remove \(plistURL.path): \(error)")
+            return false
+        }
     }
 
-    private static func runLaunchCtl(_ arguments: String...) {
+    private static func runLaunchCtl(_ arguments: String...) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         process.arguments = arguments
         do {
             try process.run()
             process.waitUntilExit()
+            return process.terminationStatus == 0
         } catch {
             dlog("[login] launchctl \(arguments) failed: \(error)")
+            return false
         }
     }
 }
