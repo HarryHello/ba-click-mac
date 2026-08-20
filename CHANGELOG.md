@@ -4,6 +4,19 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 
 ---
 
+## [0.1.1] - 2026-08-20
+
+### Changed / 变更
+- **New app icon**: authored in the modern Icon Composer (`icons/icon.icon`, macOS 26+ format) — BA triangle finders + click-effect arcs on a glass layer. Full-bleed square, macOS applies its own squircle mask. Regenerated via `tools/build-icon.sh` (uses the bundled `ictool` CLI).
+
+### Fixed / 修复
+- Unit tests are now hermetic: `test.sh` runs with an isolated `HOME` so `FXSettings.load()` can't pick up the user's real `~/.ba-click-mac-settings.json` and break the "invalid JSON falls back to defaults" test.
+
+### Engineering / 工程
+- `tools/build-icon.sh` added; README documents the Icon Composer workflow.
+
+---
+
 ## [0.1.0] - 2026-08-20
 
 Initial release of the native Swift + Metal build.

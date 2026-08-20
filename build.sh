@@ -17,7 +17,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION="${BA_CLICK_VERSION:-0.1.0}"
+VERSION="${BA_CLICK_VERSION:-0.1.1}"
 SIGN_IDENTITY="${BA_CLICK_SIGN_IDENTITY:-BA Click Mac Signing}"
 # macOS 14 is the floor: the primary render driver is a CADisplayLink
 # (the macOS 13 Timer fallback stays in the code but is no longer a target).
