@@ -20,4 +20,12 @@ swiftc \
   -framework CoreGraphics \
   -framework QuartzCore
 
-.build/baclick-tests
+# Isolate from the user's real ~/.ba-click-mac-settings.json: FXSettings.load()
+# walks candidate URLs beyond the cwd file (cwd -> exe dir -> $HOME), so the
+# "invalid JSON falls back to defaults" test could otherwise pick up the user's
+# real settings file and fail. Running with a throwaway HOME makes the test
+# hermetic.
+TEST_HOME="$(mktemp -d)"
+trap 'rm -rf "$TEST_HOME"' EXIT
+
+HOME="$TEST_HOME" .build/baclick-tests
