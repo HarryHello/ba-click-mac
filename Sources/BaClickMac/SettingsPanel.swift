@@ -7,32 +7,32 @@ struct SettingsPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("启用效果", isOn: store.binding(\.enabled))
+            Toggle(L10n.t("enableEffects"), isOn: store.binding(\.enabled))
                 .toggleStyle(.switch)
                 .controlSize(.small)
-            Toggle("开机自启", isOn: $store.launchAtLogin)
+            Toggle(L10n.t("launchAtLogin"), isOn: $store.launchAtLogin)
                 .toggleStyle(.switch)
                 .controlSize(.small)
-            Toggle("始终显示尾迹", isOn: store.binding(\.trailAlwaysVisible))
+            Toggle(L10n.t("trailAlwaysVisible"), isOn: store.binding(\.trailAlwaysVisible))
                 .toggleStyle(.switch)
                 .controlSize(.small)
-                .help("关闭后，仅在按下左键并拖动时才有尾迹")
+                .help(L10n.t("trailHelp"))
 
             Divider()
 
-            slider("尾迹粗细", value: store.binding(\.trailScale), range: 0.5...5.0)
-            slider("尾迹辉光亮度", value: store.binding(\.trailBloomStrength), range: 0...8.0)
-            slider("点击效果大小", value: store.clickScaleBinding(), range: 0.4...1.6)
-            slider("点击效果亮度", value: store.binding(\.clickBrightness), range: 0...3.0)
-            slider("点击圆盘透明度", value: store.binding(\.clickDiskOpacity), range: 0...1.0)
-            slider("三角粒子透明度", value: store.binding(\.triangleOpacity), range: 0...1.0)
+            slider(L10n.t("trailThickness"), value: store.binding(\.trailScale), range: 0.5...5.0)
+            slider(L10n.t("trailGlow"), value: store.binding(\.trailBloomStrength), range: 0...8.0)
+            slider(L10n.t("clickSize"), value: store.clickScaleBinding(), range: 0.4...1.6)
+            slider(L10n.t("clickBrightness"), value: store.binding(\.clickBrightness), range: 0...3.0)
+            slider(L10n.t("clickDiskOpacity"), value: store.binding(\.clickDiskOpacity), range: 0...1.0)
+            slider(L10n.t("triangleOpacity"), value: store.binding(\.triangleOpacity), range: 0...1.0)
 
             Divider()
 
             HStack {
-                Text("效果刷新率")
+                Text(L10n.t("refreshRate"))
                 Spacer()
-                Picker("效果刷新率", selection: store.binding(\.refreshRate)) {
+                Picker(L10n.t("refreshRate"), selection: store.binding(\.refreshRate)) {
                     Text("30").tag(30)
                     Text("60").tag(60)
                     Text("120").tag(120)
@@ -46,7 +46,7 @@ struct SettingsPanelView: View {
 
             HStack {
                 Spacer()
-                Button("退出 BA Click") { NSApp.terminate(nil) }
+                Button(L10n.t("quit")) { NSApp.terminate(nil) }
             }
         }
         .padding(.horizontal, 16)
@@ -94,7 +94,7 @@ final class SettingsPanelController: NSObject {
             backing: .buffered,
             defer: false
         )
-        panel.title = "BA Click 设置"
+        panel.title = L10n.t("panelTitle")
         panel.titlebarAppearsTransparent = true
         panel.isMovableByWindowBackground = true
         panel.isOpaque = false

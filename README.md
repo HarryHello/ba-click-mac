@@ -22,6 +22,7 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 | Live tuning | Edit `settings.json`, hot-reloaded every 0.5 s; partial files allowed | 编辑 `settings.json`，每 0.5 秒热重载；允许只写要改的键 |
 | Power saving | Stops rendering when idle; no GPU work behind hidden fullscreen (`showInFullscreen=false`) | 闲置时停止渲染；隐藏全屏时不产生 GPU 开销（`showInFullscreen=false`） |
 | Management panel | Apple-native panel via the menu bar icon: effect on/off, launch at login, trail mode/thickness/glow, click size/brightness/opacity, refresh rate | 菜单栏图标打开的 Apple 原生管理面板：效果开关、开机自启、尾迹模式/粗细/辉光、点击大小/亮度/透明度、刷新率 |
+| i18n | Chinese/English UI, auto-detects the system language (`zh*` → 中文) | 中英双语界面，自动检测系统语言（`zh*` → 中文） |
 | No Dock icon | Runs as an `.accessory` app (menu bar only), so the Dock stays clean | `.accessory` 模式运行（仅菜单栏），Dock 干净 |
 
 ## Status / 状态
@@ -162,6 +163,7 @@ Sources/BaClickMac/
   ResourceLocator.swift      Shared bundled-resource lookup
   SettingsStore.swift        ObservableObject settings store + launch-at-login
   SettingsPanel.swift        SwiftUI management panel + non-activating NSPanel
+  L10n.swift                 Chinese/English strings, system-language detection
 Resources/
   AppIcon.icns               macOS app icon (used by the .app bundle)
   icon.png                   App icon bitmap (Dock icon for the raw binary)

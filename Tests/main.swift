@@ -80,6 +80,21 @@ func testParticleSystem() {
     expect(ps2.trail.count == 2, "distant trail point added")
 }
 
+// MARK: - L10n
+
+func testL10n() {
+    expect(L10n.strings.isEmpty == false, "L10n has strings")
+    for (key, pair) in L10n.strings {
+        expect(!pair.zh.isEmpty, "L10n zh non-empty: \(key)")
+        expect(!pair.en.isEmpty, "L10n en non-empty: \(key)")
+    }
+    expect(!L10n.t("quit").isEmpty, "L10n.t returns non-empty")
+    // The two variants must actually differ (real translation, not a no-op).
+    for (key, pair) in L10n.strings where key != "panelTitle" {
+        expect(pair.zh != pair.en, "L10n zh/en differ: \(key)")
+    }
+}
+
 // MARK: - FXSettings defaults + loading
 
 func testFXSettings() {
@@ -129,6 +144,7 @@ func testFXSettings() {
 testBAEval()
 testParticleSystem()
 testFXSettings()
+testL10n()
 
 print("passed: \(passed), failed: \(failures)")
 if failures > 0 {

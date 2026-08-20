@@ -401,7 +401,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenu.addItem(
-            withTitle: "退出 BA Click",
+            withTitle: L10n.t("quit"),
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -431,7 +431,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let menu = NSMenu()
         let openItem = NSMenuItem(
-            title: "打开管理面板",
+            title: L10n.t("openPanel"),
             action: #selector(togglePanel(_:)),
             keyEquivalent: "o"
         )
@@ -440,7 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openMenuItem = openItem
         menu.addItem(.separator())
         let quitItem = NSMenuItem(
-            title: "退出 BA Click",
+            title: L10n.t("quit"),
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -457,8 +457,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateOpenMenuTitle() {
         openMenuItem?.title = (settingsPanel?.isVisible ?? false)
-            ? "关闭管理面板"
-            : "打开管理面板"
+            ? L10n.t("closePanel")
+            : L10n.t("openPanel")
     }
 
     private func loadIcon(name: String) -> NSImage? {
