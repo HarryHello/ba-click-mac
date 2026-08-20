@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickLoopTimer: Timer?
     /// Menu bar (status) item so the overlay can be quit without the Dock.
     private var statusItem: NSStatusItem?
+    private var openMenuItem: NSMenuItem?
     /// Manual 60fps render loop. We drive MTKView.draw() ourselves instead of
     /// relying on the MTKView display link, which macOS randomly stalls after
     /// Space/fullscreen transitions — that made the effect appear "randomly".
@@ -400,7 +401,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenu.addItem(
-            withTitle: "Quit BaClickMac",
+            withTitle: "退出 BA Click",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -412,7 +413,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Rendered at 22pt (chosen for clarity). The bar icon artwork was shrunk
     /// inside the SVG canvas so the glyph reads well at this size;
     /// 22px = 1x, 44px = 2x at 22pt.
-    /// Left click toggles the management panel; right click shows a quit menu.
+    /// Clicking the icon shows a menu: open/close the management panel, quit.
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
@@ -427,33 +428,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             image.isTemplate = true
             button.image = image
-            button.action = #selector(statusItemClicked)
-            button.target = self
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+        let menu = NSMenu()
+        let openItem = NSMenuItem(
+            title: "打开管理面板",
+            action: #selector(togglePanel(_:)),
+            keyEquivalent: "o"
+        )
+        openItem.target = self
+        menu.addItem(openItem)
+        openMenuItem = openItem
+        menu.addItem(.separator())
+        let quitItem = NSMenuItem(
+            title: "退出 BA Click",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        quitItem.target = NSApp
+        menu.addItem(quitItem)
+        item.menu = menu
         statusItem = item
     }
 
-    @objc private func statusItemClicked() {
-        guard let event = NSApp.currentEvent else { return }
-        if event.type == .rightMouseUp {
-            // Right click: quick quit menu.
-            let menu = NSMenu()
-            let quit = NSMenuItem(
-                title: "退出 ba-click",
-                action: #selector(NSApplication.terminate(_:)),
-                keyEquivalent: "q"
-            )
-            quit.target = NSApp
-            menu.addItem(quit)
-            statusItem?.menu = menu
-            statusItem?.button?.performClick(nil)
-            DispatchQueue.main.async { [weak self] in
-                self?.statusItem?.menu = nil
-            }
-        } else {
-            settingsPanel?.toggle()
-        }
+    @objc private func togglePanel(_ sender: Any?) {
+        settingsPanel?.toggle()
+        updateOpenMenuTitle()
+    }
+
+    private func updateOpenMenuTitle() {
+        openMenuItem?.title = (settingsPanel?.isVisible ?? false)
+            ? "关闭管理面板"
+            : "打开管理面板"
     }
 
     private func loadIcon(name: String) -> NSImage? {

@@ -8,8 +8,11 @@ struct SettingsPanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle("启用效果", isOn: store.binding(\.enabled))
+                .toggleStyle(.switch)
             Toggle("开机自启", isOn: $store.launchAtLogin)
+                .toggleStyle(.switch)
             Toggle("始终显示尾迹", isOn: store.binding(\.trailAlwaysVisible))
+                .toggleStyle(.switch)
                 .help("关闭后，仅在按下左键并拖动时才有尾迹")
 
             Divider()
@@ -40,7 +43,7 @@ struct SettingsPanelView: View {
 
             HStack {
                 Spacer()
-                Button("退出 ba-click") { NSApp.terminate(nil) }
+                Button("退出 BA Click") { NSApp.terminate(nil) }
             }
         }
         .padding(16)
@@ -56,35 +59,50 @@ struct SettingsPanelView: View {
     }
 }
 
-/// Hosts the SwiftUI panel in a non-activating NSPanel, so the app never
-/// becomes frontmost and the global mouse monitor keeps feeding the overlay
-/// while the panel is being used.
+/// Hosts the SwiftUI panel in a non-activating NSPanel with a frosted-glass
+/// (liquid glass) background, so the app never becomes frontmost and the
+/// global mouse monitor keeps feeding the overlay while the panel is used.
 final class SettingsPanelController {
     private let store: SettingsStore
     private var panel: NSPanel?
-    private let panelSize = NSSize(width: 360, height: 460)
 
     init(store: SettingsStore) {
         self.store = store
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: panelSize),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 460),
             styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.title = "ba-click 设置"
+        panel.title = "BA Click 设置"
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
         panel.level = .floating
         panel.collectionBehavior = [.moveToActiveSpace]
         panel.isReleasedWhenClosed = false
+        // Transparent window so the visual-effect glass shows through.
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        // Dark appearance keeps the glass + text consistent (liquid glass).
+        panel.appearance = NSAppearance(named: .darkAqua)
 
         let hosting = NSHostingView(rootView: SettingsPanelView(store: store))
         let fitting = hosting.fittingSize
-        hosting.frame = NSRect(origin: .zero, size: fitting)
+
+        // Frosted-glass background behind the SwiftUI content.
+        let visual = NSVisualEffectView(frame: NSRect(origin: .zero, size: fitting))
+        visual.material = .hudWindow
+        visual.blendingMode = .behindWindow
+        visual.state = .active
+        visual.isEmphasized = true
+
+        hosting.frame = visual.bounds
+        hosting.autoresizingMask = [.width, .height]
+        visual.addSubview(hosting)
+
         panel.setContentSize(fitting)
-        panel.contentView = hosting
+        panel.contentView = visual
         self.panel = panel
     }
 

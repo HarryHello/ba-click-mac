@@ -70,8 +70,8 @@ Or build a double-clickable app bundle / 或构建可双击的 .app 包:
 open build/BaClickMac.app
 ```
 
-The app runs as an `.accessory` app (no Dock icon, no menu bar) with a **menu bar icon**. **Left-click** the icon toggles the management panel; quit via the panel's **退出 ba-click** button, **right-click** the menu bar icon, or `pkill BaClickMac`.
-应用以 `.accessory` 模式运行（无 Dock 图标、无菜单栏），只有**菜单栏图标**。**左键**点击图标开关管理面板；退出用面板里的**退出 ba-click** 按钮、**右键**菜单栏图标，或终端 `pkill BaClickMac`。
+The app runs as an `.accessory` app (no Dock icon, no menu bar) with a **menu bar icon**. Clicking the icon shows a menu: **打开管理面板** (toggle open/close) and **退出 BA Click**. Quit also via the panel's **退出 BA Click** button or `pkill BaClickMac`.
+应用以 `.accessory` 模式运行（无 Dock 图标、无菜单栏），只有**菜单栏图标**。点击图标弹出菜单：**打开管理面板**（开关）与**退出 BA Click**。也可用面板里的**退出 BA Click** 按钮或 `pkill BaClickMac` 退出。
 
 ### Isolated click testing / 单独测试点击特效
 
@@ -137,8 +137,8 @@ The app loads `settings.json` from the **current working directory**, the **exec
   **事件**——`NSEvent.addGlobalMonitorForEvents` 全局监听点击/移动。应用**绝不能**变成前台，否则全局监听会收不到事件（我们只用 `orderFrontRegardless()`，绝不 `activate`）。
 - **Rendering** — offscreen HDR scene (`rgba16Float`) → `MXFinalBloom` pyramid (prefilter → downsample → upsample) → additive composite over the sharp core. Bloom is skipped entirely when nothing is on screen.
   **渲染**——离屏 HDR 场景（`rgba16Float`）→ `MXFinalBloom` 金字塔（预过滤 → 降采样 → 升采样）→ 在锐利核心之上做叠加。屏幕无内容时完全跳过辉光。
-- **Management panel** — a SwiftUI/AppKit panel hosted in a **non-activating NSPanel**: it becomes key for controls but never activates the app, so the global mouse monitor keeps feeding the overlay while you tune. The menu bar icon's **left click** toggles it. All changes apply to the renderer immediately and persist (debounced) to `settings.json`.
-  **管理面板**——SwiftUI/AppKit 面板，放在**非激活 NSPanel** 里：控件可用但不激活应用，所以调参时全局鼠标监听仍在工作。菜单栏图标**左键**开关面板。所有改动即时生效并（防抖）持久化到 `settings.json`。
+- **Management panel** — a SwiftUI/AppKit panel hosted in a **non-activating NSPanel** with a **frosted-glass** (`NSVisualEffectView`) background: it becomes key for controls but never activates the app, so the global mouse monitor keeps feeding the overlay while you tune. Clicking the menu bar icon shows a menu (打开管理面板 / 退出 BA Click). All changes apply to the renderer immediately and persist (debounced) to `settings.json`.
+  **管理面板**——SwiftUI/AppKit 面板，放在**非激活 NSPanel** 里并带**毛玻璃**（`NSVisualEffectView`）背景：控件可用但不激活应用，所以调参时全局鼠标监听仍在工作。点击菜单栏图标弹出菜单（打开管理面板 / 退出 BA Click）。所有改动即时生效并（防抖）持久化到 `settings.json`。
 - **Trail mode / 尾迹模式** — "始终显示尾迹" on: trail follows any mouse move. Off: trail only appears while the left button is held and dragging.
   **尾迹模式**——开启"始终显示尾迹"：尾迹跟随任意鼠标移动；关闭：仅在按下左键并拖动时显示尾迹。
 - **Launch at login / 开机自启** — writes a user LaunchAgent plist (`~/Library/LaunchAgents/local.ba-click-mac.plist`) pointing at the current executable; toggled from the panel.
