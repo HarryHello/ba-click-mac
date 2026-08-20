@@ -100,10 +100,13 @@ final class SettingsPanelController: NSObject {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.isFloatingPanel = true
+        panel.isFloatingPanel = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
-        panel.level = .floating
+        // Keep the panel BELOW the effect overlay (which is `.floating`) so the
+        // click effects render ON TOP of the panel, while still floating above
+        // normal app windows. (normal = 0, floating = 3)
+        panel.level = NSWindow.Level(rawValue: 2)
         panel.collectionBehavior = [.moveToActiveSpace]
         panel.isReleasedWhenClosed = false
         panel.appearance = NSAppearance(named: .darkAqua)
