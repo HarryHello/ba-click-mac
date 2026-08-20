@@ -161,10 +161,10 @@ final class SettingsPanelController: NSObject {
         if glass.responds(to: Selector(("setContentView:"))) {
             glass.setValue(content, forKey: "contentView")
         }
-        // Interactive glass (macOS 27+): subtle visual response to interaction.
-        if glass.responds(to: Selector(("setEffectIsInteractive:"))) {
-            glass.setValue(true, forKey: "effectIsInteractive")
-        }
+        // NOTE: do NOT enable effectIsInteractive (interactive glass) here — it
+        // re-renders continuously based on interaction/content changes, and
+        // with the fullscreen effect overlay animating above the panel it
+        // caused visible stutter. Static glass is smooth.
         return glass
     }
 
