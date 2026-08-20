@@ -41,8 +41,8 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - ✅ Launch at login / 开机自启
 - ⏳ Multi-monitor (currently only the main screen) / 多显示器（目前仅主屏幕）
 
-> **App icon / 应用图标**: `icons/icon.svg` is a **full-bleed square** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing the SVG, regenerate with `./tools/regen-app-icon.sh` (produces `Resources/icon.png` + `Resources/AppIcon.icns`).
-> 应用图标：`icons/icon.svg` 是**满幅方形**——macOS 会在 Dock/Launchpad 自动套上自家的 squircle mask（连续曲线，不是普通圆角，且随系统版本不同），所以**不要**在素材里自己烘焙圆角或边距。改完 SVG 用 `./tools/regen-app-icon.sh` 重新生成。
+> **App icon / 应用图标**: authored in the modern **Icon Composer** (macOS 26+ / Xcode 26) as `icons/icon.icon` (an `icon.json` manifest + layered `Assets/*.svg`). The format is **full-bleed** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing in Icon Composer, regenerate with `./tools/build-icon.sh` (renders via the bundled `ictool` CLI, produces `Resources/icon.png` + `Resources/AppIcon.icns`). Requires `/Applications/Icon Composer.app`.
+> 应用图标：用新版 **Icon Composer**（macOS 26+ / Xcode 26）制作，源文件为 `icons/icon.icon`（`icon.json` 清单 + 分层 `Assets/*.svg`）。该格式是**满幅**的——macOS 会在 Dock/Launchpad 自动套上自家的 squircle mask（连续曲线，不是普通圆角，且随系统版本不同），所以**不要**在素材里自己烘焙圆角或边距。在 Icon Composer 里改完用 `./tools/build-icon.sh` 重新生成（内部调用自带的 `ictool` CLI）。需要装有 `/Applications/Icon Composer.app`。
 >
 > **Menu bar icon / 菜单栏图标**: rendered at 22 pt from `icons/bar_icon.svg`. After editing the SVG, regenerate with
 > `./tools/svg2png.sh icons/bar_icon.svg Resources/bar_icon_22.png 22` and
@@ -191,14 +191,15 @@ Resources/
   bar_icon_22/44.png         Menu bar icon (1x / 2x template)
   circle/ring/trail/triangle  Game-derived effect textures
 icons/
-  icon.svg / bar_icon.svg    Icon sources (for regenerating the PNGs/ICNS)
+  icon.icon / bar_icon.svg    Icon sources (Icon Composer package / menu bar SVG)
 tools/
   svg2png.sh / svg2png.swift SVG → PNG converter (menu bar icon regeneration)
-  regen-app-icon.sh         Regenerate icon.png + AppIcon.icns from icon.svg
+  build-icon.sh              Regenerate icon.png + AppIcon.icns from icons/icon.icon
+  regen-app-icon.sh          Legacy: same from icons/icon.svg (kept for reference)
 Tests/
   main.swift                 Unit tests: BAEval / ParticleSystem / FXSettings
 .github/workflows/build.yml  CI: build + unit tests on macOS
-build.sh                     Build binary, or --app for the .app bundle
+build.sh                     Build binary, --app for the .app bundle, --release for DMGs
 build-app.sh                 Wrapper for ./build.sh --app
 test.sh                      Build & run the unit tests
 settings.example.json        Template for optional runtime tuning
