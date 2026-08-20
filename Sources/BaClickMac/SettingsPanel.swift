@@ -51,7 +51,7 @@ struct SettingsPanelView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
-        .padding(.top, 8)
+        .padding(.top, 30) // clear the native traffic lights (fullSizeContentView)
         .frame(width: 330)
     }
 
@@ -65,14 +65,15 @@ struct SettingsPanelView: View {
     }
 }
 
-/// Hosts the SwiftUI panel in a borderless, rounded, frosted-glass NSPanel
-/// with a custom draggable header (a transparent window breaks the native
-/// title bar, so we draw our own). The app never becomes frontmost, so the
-/// global mouse monitor keeps feeding the overlay while the panel is used.
+/// Hosts the SwiftUI panel in a titled NSPanel with a frosted-glass body.
+/// `titlebarAppearsTransparent` + `fullSizeContentView` keep the native
+/// traffic lights (red/yellow/green) and title-bar dragging while the window
+/// itself stays transparent so the glass blur shows through. The panel is
+/// non-activating, so the app never becomes frontmost and the global mouse
+/// monitor keeps feeding the overlay while the panel is used.
 final class SettingsPanelController: NSObject {
     private let store: SettingsStore
     private var panel: NSPanel?
-    private let headerHeight: CGFloat = 40
     private let cornerRadius: CGFloat = 14
 
     init(store: SettingsStore) {
@@ -83,15 +84,19 @@ final class SettingsPanelController: NSObject {
         let contentFitting = hosting.fittingSize
         let size = NSSize(
             width: max(330, contentFitting.width),
-            height: headerHeight + contentFitting.height
+            height: contentFitting.height + 10
         )
+        let contentRect = NSRect(x: 0, y: 0, width: size.width, height: size.height)
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
-            styleMask: [.borderless, .nonactivatingPanel],
+            contentRect: contentRect,
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
+        panel.title = "BA Click 设置"
+        panel.titlebarAppearsTransparent = true
+        panel.isMovableByWindowBackground = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -103,8 +108,8 @@ final class SettingsPanelController: NSObject {
         panel.isReleasedWhenClosed = false
         panel.appearance = NSAppearance(named: .darkAqua)
 
-        // Rounded container: also gives the window shadow a rounded shape.
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: size.width, height: size.height))
+        // Rounded glass container (fills the window, extends under the title bar).
+        let container = NSView(frame: contentRect)
         container.wantsLayer = true
         container.layer?.cornerRadius = cornerRadius
         container.layer?.masksToBounds = true
@@ -118,47 +123,12 @@ final class SettingsPanelController: NSObject {
         visual.autoresizingMask = [.width, .height]
         container.addSubview(visual)
 
-        // Custom draggable header (transparent windows have no usable title bar).
-        let header = PanelDragView(frame: NSRect(
-            x: 0, y: container.bounds.height - headerHeight,
-            width: container.bounds.width, height: headerHeight
-        ))
-        header.autoresizingMask = [.width, .minYMargin]
-
-        let title = NSTextField(labelWithString: "BA Click 设置")
-        title.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        title.textColor = .white
-        title.frame = NSRect(x: 14, y: (headerHeight - 16) / 2, width: 180, height: 16)
-        header.addSubview(title)
-
-        let closeButton = NSButton(title: "✕", target: self, action: #selector(closePanel))
-        closeButton.isBordered = false
-        closeButton.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        closeButton.contentTintColor = .white
-        closeButton.frame = NSRect(
-            x: container.bounds.width - 34, y: (headerHeight - 20) / 2,
-            width: 24, height: 20
-        )
-        closeButton.autoresizingMask = [.minXMargin]
-        header.addSubview(closeButton)
-
-        container.addSubview(header)
-
-        // SwiftUI content below the header.
-        hosting.frame = NSRect(
-            x: 0, y: 0,
-            width: container.bounds.width,
-            height: container.bounds.height - headerHeight
-        )
+        hosting.frame = container.bounds
         hosting.autoresizingMask = [.width, .height]
         container.addSubview(hosting)
 
         panel.contentView = container
         self.panel = panel
-    }
-
-    @objc private func closePanel() {
-        close()
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
@@ -184,12 +154,5 @@ final class SettingsPanelController: NSObject {
 
     func close() {
         panel?.orderOut(nil)
-    }
-}
-
-/// Header view that drags the borderless panel.
-final class PanelDragView: NSView {
-    override func mouseDown(with event: NSEvent) {
-        window?.performDrag(with: event)
     }
 }
