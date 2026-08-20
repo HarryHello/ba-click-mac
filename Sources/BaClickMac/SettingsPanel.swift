@@ -114,9 +114,14 @@ final class SettingsPanelController: NSObject {
         container.layer?.cornerRadius = cornerRadius
         container.layer?.masksToBounds = true
 
-        // Frosted-glass background (light material = more transparent).
+        // Native glass background. `.menu` is the material the menu bar /
+        // native menus use: on macOS 26+ the system renders it as the native
+        // Liquid Glass look, on older systems it falls back to classic
+        // vibrancy — so it auto-adapts across OS versions. (The dedicated
+        // LiquidGlassEffectView API needs the Xcode 26 SDK, which this
+        // CommandLineTools setup doesn't expose yet.)
         let visual = NSVisualEffectView(frame: container.bounds)
-        visual.material = .popover
+        visual.material = .menu
         visual.blendingMode = .behindWindow
         visual.state = .active
         visual.isEmphasized = true
