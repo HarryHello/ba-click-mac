@@ -38,6 +38,11 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - ⏳ Multi-monitor (currently only the main screen) / 多显示器（目前仅主屏幕）
 - ⏳ Control panel / tray icon / 控制面板 / 托盘图标
 
+> **Menu bar icon / 菜单栏图标**: rendered at 22 pt from `icons/bar_icon.svg`. After editing the SVG, regenerate with
+> `./tools/svg2png.sh icons/bar_icon.svg Resources/bar_icon_22.png 22` and
+> `./tools/svg2png.sh icons/bar_icon.svg Resources/bar_icon_44.png 44`.
+> 菜单栏图标以 22pt 渲染，源文件为 `icons/bar_icon.svg`。改完 SVG 后用上面的命令重新生成 PNG。
+
 ## Requirements / 环境要求
 
 - macOS 13+ (see `Package.swift` → `.macOS(.v13)`)
@@ -143,6 +148,8 @@ Resources/
   circle/ring/trail/triangle  Game-derived effect textures
 icons/
   icon.svg / bar_icon.svg    Icon sources (for regenerating the PNGs/ICNS)
+tools/
+  svg2png.sh / svg2png.swift SVG → PNG converter (menu bar icon regeneration)
 Tests/
   main.swift                 Unit tests: BAEval / ParticleSystem / FXSettings
 .github/workflows/build.yml  CI: build + unit tests on macOS

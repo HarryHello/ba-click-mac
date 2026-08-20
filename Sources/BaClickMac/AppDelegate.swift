@@ -368,18 +368,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Menu bar (status) icon using the Blue Archive bar icon. Gives a quick
     /// way to quit the overlay from the top bar.
-    /// Height is 18pt to match what tray-icon/tauri renders (and the system's
-    /// standard menu bar icon size); 22px = 1x, 44px = 2x at 18pt.
+    /// Rendered at 22pt (chosen for clarity). The bar icon artwork was shrunk
+    /// inside the SVG canvas so the glyph reads well at this size;
+    /// 22px = 1x, 44px = 2x at 22pt.
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            let image = NSImage(size: NSSize(width: 18, height: 18))
+            let image = NSImage(size: NSSize(width: 22, height: 22))
             if let rep = loadIcon(name: "bar_icon_22")?.representations.first {
-                rep.size = NSSize(width: 18, height: 18)
+                rep.size = NSSize(width: 22, height: 22)
                 image.addRepresentation(rep)
             }
             if let rep = loadIcon(name: "bar_icon_44")?.representations.first {
-                rep.size = NSSize(width: 18, height: 18)
+                rep.size = NSSize(width: 22, height: 22)
                 image.addRepresentation(rep)
             }
             image.isTemplate = true
