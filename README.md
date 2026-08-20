@@ -38,8 +38,8 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - ⏳ Multi-monitor (currently only the main screen) / 多显示器（目前仅主屏幕）
 - ⏳ Control panel / tray icon / 控制面板 / 托盘图标
 
-> **App icon / 应用图标**: `icons/icon.svg` has the Big Sur style baked in (100px transparent margin + 824px rounded grid, corner radius 185) so it displays as a proper rounded icon everywhere — macOS's own mask only rounds the outer boundary and a full-bleed image reads as a square. After editing the SVG, regenerate with `./tools/regen-app-icon.sh` (produces `Resources/icon.png` + `Resources/AppIcon.icns`).
-> 应用图标：`icons/icon.svg` 已内置 Big Sur 风格（100px 透明边距 + 824px 圆角网格，圆角半径 185），在任何位置都显示为正规圆角图标——系统 mask 只削外边界，满幅图会看起来像方块。改完 SVG 用 `./tools/regen-app-icon.sh` 重新生成。
+> **App icon / 应用图标**: `icons/icon.svg` is a **full-bleed square** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing the SVG, regenerate with `./tools/regen-app-icon.sh` (produces `Resources/icon.png` + `Resources/AppIcon.icns`).
+> 应用图标：`icons/icon.svg` 是**满幅方形**——macOS 会在 Dock/Launchpad 自动套上自家的 squircle mask（连续曲线，不是普通圆角，且随系统版本不同），所以**不要**在素材里自己烘焙圆角或边距。改完 SVG 用 `./tools/regen-app-icon.sh` 重新生成。
 >
 > **Menu bar icon / 菜单栏图标**: rendered at 22 pt from `icons/bar_icon.svg`. After editing the SVG, regenerate with
 > `./tools/svg2png.sh icons/bar_icon.svg Resources/bar_icon_22.png 22` and
