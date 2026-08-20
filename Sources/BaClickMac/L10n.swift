@@ -36,7 +36,6 @@ enum L10n {
 
         // Menu bar
         "openPanel": ("打开管理面板", "Open Management Panel"),
-        "closePanel": ("关闭管理面板", "Close Management Panel"),
         "quit": ("退出 BA Click", "Quit BA Click"),
     ]
 

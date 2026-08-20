@@ -14,7 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickLoopTimer: Timer?
     /// Menu bar (status) item so the overlay can be quit without the Dock.
     private var statusItem: NSStatusItem?
-    private var openMenuItem: NSMenuItem?
     /// Manual render loop driver: CADisplayLink (vsync-synced, macOS 14+) or a
     /// fallback Timer. We call MTKView.draw() ourselves so rendering never
     /// depends on the MTKView's own (fragile) display-link lifecycle.
@@ -478,14 +477,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = image
         }
         let menu = NSMenu()
+        // Static "open" item: the panel is closed via its own traffic-light
+        // button, so the menu item never toggles its label.
         let openItem = NSMenuItem(
             title: L10n.t("openPanel"),
-            action: #selector(togglePanel(_:)),
+            action: #selector(openPanel(_:)),
             keyEquivalent: "o"
         )
         openItem.target = self
         menu.addItem(openItem)
-        openMenuItem = openItem
         menu.addItem(.separator())
         let quitItem = NSMenuItem(
             title: L10n.t("quit"),
@@ -498,15 +498,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
     }
 
-    @objc private func togglePanel(_ sender: Any?) {
-        settingsPanel?.toggle()
-        updateOpenMenuTitle()
-    }
-
-    private func updateOpenMenuTitle() {
-        openMenuItem?.title = (settingsPanel?.isVisible ?? false)
-            ? L10n.t("closePanel")
-            : L10n.t("openPanel")
+    @objc private func openPanel(_ sender: Any?) {
+        // Idempotent: opens the panel, or brings it forward if already open.
+        settingsPanel?.show()
     }
 
     private func loadIcon(name: String) -> NSImage? {
