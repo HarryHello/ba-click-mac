@@ -11,5 +11,11 @@
   "bloomDiffusion": 7.0,
   "bloomThreshold": 1.0,
   "bloomFalloff": 0.35,
-  "bloomBoost": 1.2
+  "bloomBoost": 1.2,
+  "enabled": true,
+  "trailAlwaysVisible": true,
+  "clickBrightness": 1.0,
+  "clickDiskOpacity": 1.0,
+  "triangleOpacity": 1.0,
+  "refreshRate": 60
 }

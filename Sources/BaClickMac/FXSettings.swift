@@ -1,7 +1,8 @@
 import Foundation
 
-/// Runtime tuning parameters. Edit `settings.json` next to the executable
-/// (or in the working directory) and save — the app reloads it every 0.5s.
+/// Runtime tuning parameters. The management panel edits these live; they are
+/// persisted to `settings.json` (or `~/.ba-click-mac-settings.json` for the
+/// launch-at-login case) and applied to the renderer immediately.
 ///
 /// The defaults below are the tuned "best" values (see README). An optional
 /// `settings.json` overrides them; a template lives in `settings.example.json`.
@@ -21,6 +22,13 @@ struct FXSettings: Codable {
     static let defaultBloomThreshold: Float = 1.0
     static let defaultBloomFalloff: Float = 0.35
     static let defaultBloomBoost: Float = 1.2
+    // Panel controls.
+    static let defaultEnabled: Bool = true
+    static let defaultTrailAlwaysVisible: Bool = true
+    static let defaultClickBrightness: Float = 1.0
+    static let defaultClickDiskOpacity: Float = 1.0
+    static let defaultTriangleOpacity: Float = 1.0
+    static let defaultRefreshRate: Int = 60
 
     var diskScale: Float
     var ringScale: Float
@@ -35,6 +43,13 @@ struct FXSettings: Codable {
     var bloomThreshold: Float
     var bloomFalloff: Float
     var bloomBoost: Float
+    // Panel controls.
+    var enabled: Bool
+    var trailAlwaysVisible: Bool
+    var clickBrightness: Float
+    var clickDiskOpacity: Float
+    var triangleOpacity: Float
+    var refreshRate: Int
 
     init() {
         diskScale = Self.defaultDiskScale
@@ -50,6 +65,12 @@ struct FXSettings: Codable {
         bloomThreshold = Self.defaultBloomThreshold
         bloomFalloff = Self.defaultBloomFalloff
         bloomBoost = Self.defaultBloomBoost
+        enabled = Self.defaultEnabled
+        trailAlwaysVisible = Self.defaultTrailAlwaysVisible
+        clickBrightness = Self.defaultClickBrightness
+        clickDiskOpacity = Self.defaultClickDiskOpacity
+        triangleOpacity = Self.defaultTriangleOpacity
+        refreshRate = Self.defaultRefreshRate
     }
 
     /// Lenient decoding: a `settings.json` may contain only the keys the user
@@ -71,6 +92,12 @@ struct FXSettings: Codable {
         bloomThreshold = try c.decodeIfPresent(Float.self, forKey: .bloomThreshold) ?? Self.defaultBloomThreshold
         bloomFalloff = try c.decodeIfPresent(Float.self, forKey: .bloomFalloff) ?? Self.defaultBloomFalloff
         bloomBoost = try c.decodeIfPresent(Float.self, forKey: .bloomBoost) ?? Self.defaultBloomBoost
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? Self.defaultEnabled
+        trailAlwaysVisible = try c.decodeIfPresent(Bool.self, forKey: .trailAlwaysVisible) ?? Self.defaultTrailAlwaysVisible
+        clickBrightness = try c.decodeIfPresent(Float.self, forKey: .clickBrightness) ?? Self.defaultClickBrightness
+        clickDiskOpacity = try c.decodeIfPresent(Float.self, forKey: .clickDiskOpacity) ?? Self.defaultClickDiskOpacity
+        triangleOpacity = try c.decodeIfPresent(Float.self, forKey: .triangleOpacity) ?? Self.defaultTriangleOpacity
+        refreshRate = try c.decodeIfPresent(Int.self, forKey: .refreshRate) ?? Self.defaultRefreshRate
     }
 
     static let knownKeys: Set<String> = [
@@ -78,6 +105,8 @@ struct FXSettings: Codable {
         "showInFullscreen", "clickBloomStrength", "trailBloomStrength",
         "bloomStrength", "bloomLevels", "bloomDiffusion", "bloomThreshold",
         "bloomFalloff", "bloomBoost",
+        "enabled", "trailAlwaysVisible", "clickBrightness",
+        "clickDiskOpacity", "triangleOpacity", "refreshRate",
     ]
 
     static func load() -> FXSettings {
@@ -101,6 +130,21 @@ struct FXSettings: Codable {
             }
         }
         return defaults
+    }
+
+    /// Where settings should be persisted: the first existing candidate
+    /// (matches load order); if none exists, fall back to the home-directory
+    /// file so changes survive the launch-at-login case (cwd = "/" there).
+    static func persistURL() -> URL {
+        let candidates = FXSettings.candidateURLs()
+        for url in candidates where FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
+        if let home = ProcessInfo.processInfo.environment["HOME"] {
+            return URL(fileURLWithPath: home)
+                .appendingPathComponent(".ba-click-mac-settings.json")
+        }
+        return candidates[0]
     }
 
     /// Typo'd/unknown keys are silently ignored by Codable; warn so the user

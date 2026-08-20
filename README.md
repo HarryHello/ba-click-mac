@@ -21,6 +21,8 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 | Fullscreen | NSPanel (`fullScreenAuxiliary`) is carried into fullscreen apps' Spaces automatically — works over QQ / Chrome fullscreen video | NSPanel（`fullScreenAuxiliary`）自动进入全屏应用的 Space —— QQ / Chrome 全屏视频下均正常 |
 | Live tuning | Edit `settings.json`, hot-reloaded every 0.5 s; partial files allowed | 编辑 `settings.json`，每 0.5 秒热重载；允许只写要改的键 |
 | Power saving | Stops rendering when idle; no GPU work behind hidden fullscreen (`showInFullscreen=false`) | 闲置时停止渲染；隐藏全屏时不产生 GPU 开销（`showInFullscreen=false`） |
+| Management panel | Apple-native panel via the menu bar icon: effect on/off, launch at login, trail mode/thickness/glow, click size/brightness/opacity, refresh rate | 菜单栏图标打开的 Apple 原生管理面板：效果开关、开机自启、尾迹模式/粗细/辉光、点击大小/亮度/透明度、刷新率 |
+| No Dock icon | Runs as an `.accessory` app (menu bar only), so the Dock stays clean | `.accessory` 模式运行（仅菜单栏），Dock 干净 |
 
 ## Status / 状态
 
@@ -34,9 +36,9 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - ✅ Manual 60 fps render loop (display-link stalls fixed) / 手动 60fps 渲染循环（修复 display link 停滞）
 - ✅ Idle power saving (render stops when nothing is on screen) / 闲置省电（无内容时停止渲染）
 - ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`) / 单元测试 + CI
-- ✅ App icon (Dock) + menu bar icon (status item) / 应用图标（Dock）+ 菜单栏图标
+- ✅ Menu bar icon + management panel (no Dock icon) / 菜单栏图标 + 管理面板（无 Dock 图标）
+- ✅ Launch at login / 开机自启
 - ⏳ Multi-monitor (currently only the main screen) / 多显示器（目前仅主屏幕）
-- ⏳ Control panel / tray icon / 控制面板 / 托盘图标
 
 > **App icon / 应用图标**: `icons/icon.svg` is a **full-bleed square** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing the SVG, regenerate with `./tools/regen-app-icon.sh` (produces `Resources/icon.png` + `Resources/AppIcon.icns`).
 > 应用图标：`icons/icon.svg` 是**满幅方形**——macOS 会在 Dock/Launchpad 自动套上自家的 squircle mask（连续曲线，不是普通圆角，且随系统版本不同），所以**不要**在素材里自己烘焙圆角或边距。改完 SVG 用 `./tools/regen-app-icon.sh` 重新生成。
@@ -68,8 +70,8 @@ Or build a double-clickable app bundle / 或构建可双击的 .app 包:
 open build/BaClickMac.app
 ```
 
-Quit / 退出: the app shows in the Dock (`.regular` activation policy) and adds a **menu bar icon** — use the Dock icon, the menu bar icon, **Quit BaClickMac** (`Cmd+Q`), or `pkill BaClickMac` from the terminal.
-应用显示在 Dock（`.regular` 激活策略），并在菜单栏添加图标——用 Dock 图标、菜单栏图标、**Quit BaClickMac**（`Cmd+Q`），或终端 `pkill BaClickMac` 退出。
+The app runs as an `.accessory` app (no Dock icon, no menu bar) with a **menu bar icon**. **Left-click** the icon toggles the management panel; quit via the panel's **退出 ba-click** button, **right-click** the menu bar icon, or `pkill BaClickMac`.
+应用以 `.accessory` 模式运行（无 Dock 图标、无菜单栏），只有**菜单栏图标**。**左键**点击图标开关管理面板；退出用面板里的**退出 ba-click** 按钮、**右键**菜单栏图标，或终端 `pkill BaClickMac`。
 
 ### Isolated click testing / 单独测试点击特效
 
@@ -107,6 +109,14 @@ The app loads `settings.json` from the **current working directory**, the **exec
 | `bloomThreshold` | `1.0` | Brightness threshold (gamma space) for bloom prefilter / 辉光预过滤亮度阈值（伽马空间） |
 | `bloomFalloff` | `0.35` | Rational falloff knee `a = lum/(lum+k)` / 有理式衰减拐点 |
 | `bloomBoost` | `1.2` | Extra glow overlay brightness / 辉光叠加额外亮度 |
+| `enabled` | `true` | Master effect switch / 效果总开关 |
+| `trailAlwaysVisible` | `true` | Trail on any mouse move; `false` = only while left-dragging / 尾迹始终显示；`false` = 仅左键拖动时 |
+| `clickBrightness` | `1.0` | Click effect brightness / 点击效果亮度 |
+| `clickDiskOpacity` | `1.0` | Click disk opacity / 点击圆盘透明度 |
+| `triangleOpacity` | `1.0` | Triangle particle opacity / 三角粒子透明度 |
+| `refreshRate` | `60` | Render refresh rate (30/60/120/240) / 渲染刷新率 |
+
+> **Launch at login / 开机自启** is not persisted in `settings.json` — it's a system LaunchAgent state toggled by the panel's 开机自启 switch.
 
 > **Lenient parsing / 宽容解析**: a `settings.json` may contain **only the keys you want to override** — missing keys keep the defaults. Unknown keys print a warning to stderr (ignored); invalid JSON prints a warning and falls back to defaults. This is intentional, so a partial edit never silently wipes your other settings.
 >
@@ -127,6 +137,12 @@ The app loads `settings.json` from the **current working directory**, the **exec
   **事件**——`NSEvent.addGlobalMonitorForEvents` 全局监听点击/移动。应用**绝不能**变成前台，否则全局监听会收不到事件（我们只用 `orderFrontRegardless()`，绝不 `activate`）。
 - **Rendering** — offscreen HDR scene (`rgba16Float`) → `MXFinalBloom` pyramid (prefilter → downsample → upsample) → additive composite over the sharp core. Bloom is skipped entirely when nothing is on screen.
   **渲染**——离屏 HDR 场景（`rgba16Float`）→ `MXFinalBloom` 金字塔（预过滤 → 降采样 → 升采样）→ 在锐利核心之上做叠加。屏幕无内容时完全跳过辉光。
+- **Management panel** — a SwiftUI/AppKit panel hosted in a **non-activating NSPanel**: it becomes key for controls but never activates the app, so the global mouse monitor keeps feeding the overlay while you tune. The menu bar icon's **left click** toggles it. All changes apply to the renderer immediately and persist (debounced) to `settings.json`.
+  **管理面板**——SwiftUI/AppKit 面板，放在**非激活 NSPanel** 里：控件可用但不激活应用，所以调参时全局鼠标监听仍在工作。菜单栏图标**左键**开关面板。所有改动即时生效并（防抖）持久化到 `settings.json`。
+- **Trail mode / 尾迹模式** — "始终显示尾迹" on: trail follows any mouse move. Off: trail only appears while the left button is held and dragging.
+  **尾迹模式**——开启"始终显示尾迹"：尾迹跟随任意鼠标移动；关闭：仅在按下左键并拖动时显示尾迹。
+- **Launch at login / 开机自启** — writes a user LaunchAgent plist (`~/Library/LaunchAgents/local.ba-click-mac.plist`) pointing at the current executable; toggled from the panel.
+  **开机自启**——写入用户 LaunchAgent plist（`~/Library/LaunchAgents/local.ba-click-mac.plist`）指向当前可执行文件；由面板开关控制。
 
 ## Project layout / 工程结构
 
@@ -144,6 +160,8 @@ Sources/BaClickMac/
   BAEffectData.swift         Unity keyframes / game-derived values
   DebugLog.swift             stderr logging + bail() helper
   ResourceLocator.swift      Shared bundled-resource lookup
+  SettingsStore.swift        ObservableObject settings store + launch-at-login
+  SettingsPanel.swift        SwiftUI management panel + non-activating NSPanel
 Resources/
   AppIcon.icns               macOS app icon (used by the .app bundle)
   icon.png                   App icon bitmap (Dock icon for the raw binary)

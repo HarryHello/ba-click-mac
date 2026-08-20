@@ -89,6 +89,12 @@ func testFXSettings() {
     expect(defaults.clickBloomStrength == 0.1, "default clickBloomStrength = 0.1")
     expect(defaults.trailBloomStrength == 3.5, "default trailBloomStrength = 3.5")
     expect(defaults.showInFullscreen == true, "default showInFullscreen = true")
+    expect(defaults.enabled == true, "default enabled = true")
+    expect(defaults.trailAlwaysVisible == true, "default trailAlwaysVisible = true")
+    expect(defaults.clickBrightness == 1.0, "default clickBrightness = 1.0")
+    expect(defaults.clickDiskOpacity == 1.0, "default clickDiskOpacity = 1.0")
+    expect(defaults.triangleOpacity == 1.0, "default triangleOpacity = 1.0")
+    expect(defaults.refreshRate == 60, "default refreshRate = 60")
 
     let tmp = FileManager.default.temporaryDirectory
         .appendingPathComponent("baclick-tests-\(UUID().uuidString)")

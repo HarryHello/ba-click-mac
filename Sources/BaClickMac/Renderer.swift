@@ -87,8 +87,6 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let upsamplePassDescriptor = MTLRenderPassDescriptor()
     private weak var currentView: MTKView?
     private(set) var settings: FXSettings
-    private var lastSettingsReload: TimeInterval = 0
-    private static let settingsReloadInterval: TimeInterval = 0.5
 
     private var viewportSize = SIMD2<Float>(1, 1)
     private var scale: Float = 1
@@ -242,26 +240,26 @@ final class Renderer: NSObject, MTKViewDelegate {
         updateProjection(view: view)
     }
 
+    /// Apply a new settings snapshot (from the management panel) immediately —
+    /// no file reload. Rebuilds the bloom pyramid when its params changed.
+    func applySettings(_ newSettings: FXSettings) {
+        if newSettings.bloomLevels != lastBloomLevels ||
+            newSettings.bloomDiffusion != lastBloomDiffusion {
+            lastBloomLevels = newSettings.bloomLevels
+            lastBloomDiffusion = newSettings.bloomDiffusion
+            sceneSize = .zero
+            if let view = currentView {
+                updateProjection(view: view)
+            }
+        }
+        settings = newSettings
+        particleSystem.ringScale = newSettings.ringScale
+        particleSystem.shardScale = newSettings.shardScale
+    }
+
     func draw(in view: MTKView) {
         let now = CACurrentMediaTime()
         lastDrawTime = now
-
-        // Reload settings.json every 0.5s so the user can tune live.
-        if now - lastSettingsReload > Renderer.settingsReloadInterval {
-            settings = FXSettings.load()
-            particleSystem.ringScale = settings.ringScale
-            particleSystem.shardScale = settings.shardScale
-            if settings.bloomLevels != lastBloomLevels ||
-                settings.bloomDiffusion != lastBloomDiffusion {
-                lastBloomLevels = settings.bloomLevels
-                lastBloomDiffusion = settings.bloomDiffusion
-                sceneSize = .zero
-                if let view = currentView {
-                    updateProjection(view: view)
-                }
-            }
-            lastSettingsReload = now
-        }
 
         particleSystem.update(now: now)
 
@@ -453,11 +451,12 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         // Separate glow source intensity for click vs trail: the HDR scene
         // brightness controls how strongly each contributes to bloom.
-        var diskEmission = BAEffect.disk.emission * (sceneTarget ? settings.clickBloomStrength : 1.0)
+        // settings.clickBrightness uniformly scales the whole click effect.
+        var diskEmission = BAEffect.disk.emission * (sceneTarget ? settings.clickBloomStrength : 1.0) * settings.clickBrightness
         encoder.setFragmentBytes(&diskEmission, length: MemoryLayout<Float>.size, index: 2)
         drawTextured(vertices: disk, texture: circleTexture, pipeline: diskPipeline, encoder: encoder)
 
-        var ringEmission = BAEffect.rings.hdrIntensity * (sceneTarget ? settings.clickBloomStrength : 1.0)
+        var ringEmission = BAEffect.rings.hdrIntensity * (sceneTarget ? settings.clickBloomStrength : 1.0) * settings.clickBrightness
         encoder.setFragmentBytes(&ringEmission, length: MemoryLayout<Float>.size, index: 2)
         drawRing(vertices: ring, texture: ringTexture, pipeline: ringPipeline, encoder: encoder)
 
@@ -491,7 +490,7 @@ final class Renderer: NSObject, MTKViewDelegate {
                 uvMin: SIMD2(0, 0),
                 uvMax: SIMD2(1, 1),
                 color: material,
-                particleAlpha: alpha,
+                particleAlpha: alpha * settings.clickDiskOpacity,
                 coverageFactor: 1,
                 to: &vertices
             )
@@ -539,7 +538,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
             let size = shard.size * BAEval.hermite(BAEffect.shards.sizeKeys, progress)
             let color = BAEval.color(BAEffect.shards.colorKeys, progress)
-            let material = Renderer.linearEnergy(color, intensity: BAEffect.shards.hdrIntensity) * BAEffect.shards.startColor
+            let material = Renderer.linearEnergy(color, intensity: BAEffect.shards.hdrIntensity) * BAEffect.shards.startColor * settings.clickBrightness
             // Original FX_TEX_Triangle_02_1 is a 2x1 atlas: left frame is the
             // base triangle, right frame is its vertical flip.
             let frame = shard.textureFrame % 2
@@ -554,7 +553,7 @@ final class Renderer: NSObject, MTKViewDelegate {
                 uvMin: uvMin,
                 uvMax: uvMax,
                 color: material,
-                particleAlpha: alpha,
+                particleAlpha: alpha * settings.triangleOpacity,
                 coverageFactor: 1,
                 to: &vertices
             )

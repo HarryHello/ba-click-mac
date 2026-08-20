@@ -5,6 +5,9 @@ import simd
 /// anywhere on the screen while remaining click-through.
 final class MouseMonitor {
     var onMouseDown: ((SIMD2<Float>) -> Void)?
+    /// Left button held + dragging (always feeds the trail).
+    var onMouseDrag: ((SIMD2<Float>) -> Void)?
+    /// Plain mouse move, no button (feeds the trail only when "always visible").
     var onMouseMove: ((SIMD2<Float>) -> Void)?
 
     private let screenFrame: NSRect
@@ -23,7 +26,9 @@ final class MouseMonitor {
             switch event.type {
             case .leftMouseDown:
                 self.onMouseDown?(point)
-            case .leftMouseDragged, .mouseMoved:
+            case .leftMouseDragged:
+                self.onMouseDrag?(point)
+            case .mouseMoved:
                 self.onMouseMove?(point)
             default:
                 break

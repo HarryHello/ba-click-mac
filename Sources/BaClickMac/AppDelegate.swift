@@ -26,14 +26,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fullscreenHidden = false
     private var lastFullscreenState: Bool?
 
-    private static let renderFrameInterval: TimeInterval = 1.0 / 60.0
+    /// Single source of truth for settings (management panel + renderer).
+    let store = SettingsStore()
+    private var settingsPanel: SettingsPanelController?
+    /// Current render timer interval; follows the effect refresh rate.
+    private var currentRenderInterval: TimeInterval = 1.0 / 60.0
+
     private static let housekeepingInterval: TimeInterval = 0.5
     private static let stallThreshold: TimeInterval = 0.5
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
         setupStatusItem()
-        setupAppIcon()
 
         guard let screen = NSScreen.main ?? NSScreen.screens.first else {
             bail("No screen available")
@@ -97,6 +101,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window?.orderFrontRegardless()
 
         self.reapplyTransparency()
+
+        // Management panel + live settings wiring: every panel change applies
+        // to the renderer immediately and (if the render timer is running)
+        // restarts it at the new refresh rate.
+        renderer.applySettings(store.model)
+        settingsPanel = SettingsPanelController(store: store)
+        currentRenderInterval = 1.0 / Double(max(1, store.model.refreshRate))
+        store.onChange = { [weak self] in
+            guard let self else { return }
+            self.renderer?.applySettings(self.store.model)
+            self.syncRenderTimer()
+            if !self.store.model.enabled {
+                self.renderer?.particleSystem.clear()
+            }
+        }
 
         // This overlay is never the frontmost app, so App Nap would throttle
         // its timers/rendering randomly. Assert an activity so clicks are
@@ -182,12 +201,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so we observe them system-wide and feed the effect manually.
         let monitor = MouseMonitor(screenFrame: frame)
         monitor.onMouseDown = { [weak renderer, weak self] point in
-            // Wake the idle-stopped render loop before feeding a new effect.
-            self?.startRenderTimer()
+            guard let self, self.store.model.enabled else { return }
+            self.startRenderTimer() // wake the idle-stopped render loop
             renderer?.particleSystem.addClick(at: point)
         }
+        monitor.onMouseDrag = { [weak renderer, weak self] point in
+            guard let self, self.store.model.enabled else { return }
+            self.startRenderTimer()
+            renderer?.particleSystem.addTrailPoint(at: point)
+        }
         monitor.onMouseMove = { [weak renderer, weak self] point in
-            self?.startRenderTimer()
+            // Trail only follows a free mouse move when "always visible" is on;
+            // dragging (left button held) always draws it.
+            guard let self, self.store.model.enabled, self.store.model.trailAlwaysVisible else { return }
+            self.startRenderTimer()
             renderer?.particleSystem.addTrailPoint(at: point)
         }
         monitor.start()
@@ -202,7 +229,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Float(frame.midY)
             )
             let loop = Timer(timeInterval: 0.9, repeats: true) { [weak renderer, weak self] _ in
-                self?.startRenderTimer()
+                guard let self, self.store.model.enabled else { return }
+                self.startRenderTimer()
                 renderer?.particleSystem.addClick(at: center)
             }
             RunLoop.main.add(loop, forMode: .common)
@@ -252,9 +280,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Start the manual 60fps render loop (idempotent). The MTKView's own
-    /// display link stays paused; we call draw() ourselves so rendering never
-    /// depends on AppKit's fragile display-link lifecycle.
+    /// Start the manual render loop at the configured refresh rate
+    /// (idempotent). The MTKView's own display link stays paused; we call
+    /// draw() ourselves so rendering never depends on AppKit's fragile
+    /// display-link lifecycle.
     ///
     /// Power saving: the loop stops itself as soon as nothing is on screen
     /// (idle -> zero GPU work). Clicks / mouse moves / the click-loop wake it
@@ -262,7 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startRenderTimer() {
         guard renderTimer == nil, let overlayView else { return }
         overlayView.isPaused = true
-        let timer = Timer(timeInterval: Self.renderFrameInterval, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: currentRenderInterval, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.overlayView?.draw()
             // Nothing left on screen -> stop until the next interaction.
@@ -277,6 +306,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stopRenderTimer() {
         renderTimer?.invalidate()
         renderTimer = nil
+    }
+
+    /// Restart the render timer if the effect refresh rate changed while it is
+    /// running (idle-stopped timers pick up the new rate on their next wake).
+    private func syncRenderTimer() {
+        let interval = 1.0 / Double(max(1, store.model.refreshRate))
+        if abs(interval - currentRenderInterval) > 0.0001 {
+            currentRenderInterval = interval
+            if renderTimer != nil {
+                stopRenderTimer()
+                startRenderTimer()
+            }
+        }
     }
 
     /// Fullscreen handling for the single persistent NSPanel:
@@ -366,11 +408,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = mainMenu
     }
 
-    /// Menu bar (status) icon using the Blue Archive bar icon. Gives a quick
-    /// way to quit the overlay from the top bar.
+    /// Menu bar (status) icon using the Blue Archive bar icon.
     /// Rendered at 22pt (chosen for clarity). The bar icon artwork was shrunk
     /// inside the SVG canvas so the glyph reads well at this size;
     /// 22px = 1x, 44px = 2x at 22pt.
+    /// Left click toggles the management panel; right click shows a quit menu.
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
@@ -385,27 +427,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             image.isTemplate = true
             button.image = image
+            button.action = #selector(statusItemClicked)
+            button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
-        let menu = NSMenu()
-        menu.addItem(
-            withTitle: "Quit BaClickMac",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        item.menu = menu
         statusItem = item
+    }
+
+    @objc private func statusItemClicked() {
+        guard let event = NSApp.currentEvent else { return }
+        if event.type == .rightMouseUp {
+            // Right click: quick quit menu.
+            let menu = NSMenu()
+            let quit = NSMenuItem(
+                title: "退出 ba-click",
+                action: #selector(NSApplication.terminate(_:)),
+                keyEquivalent: "q"
+            )
+            quit.target = NSApp
+            menu.addItem(quit)
+            statusItem?.menu = menu
+            statusItem?.button?.performClick(nil)
+            DispatchQueue.main.async { [weak self] in
+                self?.statusItem?.menu = nil
+            }
+        } else {
+            settingsPanel?.toggle()
+        }
     }
 
     private func loadIcon(name: String) -> NSImage? {
         guard let url = findResourceURL(name: name, ext: "png") else { return nil }
         return NSImage(contentsOf: url)
-    }
-
-    /// Dock icon: load the Blue Archive app icon (also covers the raw binary
-    /// run via run.sh, which has no bundle icon).
-    private func setupAppIcon() {
-        guard let url = findResourceURL(name: "icon", ext: "png"),
-              let image = NSImage(contentsOf: url) else { return }
-        NSApp.applicationIconImage = image
     }
 }

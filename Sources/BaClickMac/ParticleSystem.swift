@@ -106,6 +106,15 @@ final class ParticleSystem {
         !bursts.isEmpty || !shards.isEmpty || !trail.isEmpty
     }
 
+    /// Immediately drop every particle/trail/queued click (used when the
+    /// effect master switch is turned off).
+    func clear() {
+        bursts.removeAll()
+        shards.removeAll()
+        trail.removeAll()
+        pendingClicks.removeAll()
+    }
+
     // MARK: - Spawning
 
     private func spawnClick(at position: SIMD2<Float>) {
