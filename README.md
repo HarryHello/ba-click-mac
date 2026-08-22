@@ -64,7 +64,7 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 ```bash
 ./build.sh            # compile → .build/ba-click-mac
 ./run.sh              # build (if needed) then run
-./test.sh             # unit tests: BAEval / ParticleSystem / FXSettings
+./test.sh             # unit tests: BAEval / ParticleSystem / FXSettings / UpdateManager
 ```
 
 Or build a double-clickable app bundle / 或构建可双击的 .app 包:
