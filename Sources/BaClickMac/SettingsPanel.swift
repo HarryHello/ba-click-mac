@@ -52,14 +52,16 @@ struct SettingsPanelView: View {
             Divider()
 
             // Update check + GitHub repo on one row, each expanding to fill
-            // the full width, with a status line that always reserves space so
-            // the panel height stays stable.
+            // the full width. On macOS the button bezel only stretches when the
+            // LABEL (not the button) expands, so maxWidth goes on the Text.
             HStack(spacing: 8) {
-                Button(L10n.t("checkForUpdates")) { updates.checkForUpdates() }
-                    .disabled(updateBusy)
-                    .frame(maxWidth: .infinity)
-                Button(L10n.t("openGitHub")) { updates.openRepository() }
-                    .frame(maxWidth: .infinity)
+                Button(action: { updates.checkForUpdates() }) {
+                    Text(L10n.t("checkForUpdates")).frame(maxWidth: .infinity)
+                }
+                .disabled(updateBusy)
+                Button(action: { updates.openRepository() }) {
+                    Text(L10n.t("openGitHub")).frame(maxWidth: .infinity)
+                }
             }
             HStack {
                 statusText
