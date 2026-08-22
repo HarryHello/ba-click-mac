@@ -4,6 +4,19 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 
 ---
 
+## [0.2.0] - 2026-08-20
+
+### 新增 / Added
+- **右键 & 中键点击效果**：现在右键（按钮 2）和中键（按钮 3）也会触发点击特效；面板新增「右键点击效果」「中键点击效果」两个开关，可独立关闭。拖拽尾迹同样支持右键/中键（关闭「始终显示尾迹」时，按住任意按钮拖动都会出现尾迹）。
+- **版本更新检测**：面板新增「检查更新」按钮，查询 GitHub Releases 最新版本并与当前版本对比；有更新时可一键自动更新（下载对应架构 DMG → 挂载 → 替换应用 → 自动重启），无法自动更新（裸二进制运行 / 应用目录不可写 / 下载或挂载失败）时自动跳转 GitHub Releases 页面手动下载。
+- **跳转 GitHub 仓库**：「GitHub 仓库」按钮与「检查更新」同一行，一键打开仓库主页。
+
+### 工程 / Engineering
+- `AppInfo.swift` 集中管理版本号与 GitHub 链接；`UpdateManager.swift` 实现检查 / 下载 / 自动更新（更新日志写入 `~/Library/Logs/BA Click/update.log`）。
+- 新增设置项测试与版本比较单元测试。
+
+---
+
 ## [0.1.1] - 2026-08-20
 
 ### Changed / 变更

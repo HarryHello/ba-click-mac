@@ -143,6 +143,39 @@ func testL10n() {
     }
 }
 
+// MARK: - UpdateManager version parsing (pure functions)
+
+func testVersionCompare() {
+    expect(UpdateManager.normalizeVersion("v1.2.3") == [1, 2, 3], "normalize: strips leading v")
+    expect(UpdateManager.normalizeVersion("1.2.3") == [1, 2, 3], "normalize: plain version")
+    expect(UpdateManager.normalizeVersion("v0.1.1") == [0, 1, 1], "normalize: 0.x version")
+    expect(UpdateManager.normalizeVersion("  V2.0 ") == [2, 0], "normalize: trims + uppercase V")
+
+    expect(UpdateManager.compare([1, 0, 0], [1, 0, 0]) == 0, "compare: equal")
+    expect(UpdateManager.compare([1, 0, 0], [1, 0, 1]) == -1, "compare: older")
+    expect(UpdateManager.compare([2, 0, 0], [1, 9, 9]) == 1, "compare: newer")
+    expect(UpdateManager.compare([1, 2], [1, 2, 0]) == 0, "compare: missing components are zero")
+    expect(UpdateManager.compare([1, 2], [1, 2, 1]) == -1, "compare: shorter is older")
+}
+
+// MARK: - Update check (live network; opt-in via BA_TEST_NETWORK=1)
+
+/// Exercises the real GitHub latest-release API. Skipped unless
+/// BA_TEST_NETWORK is set (unauthenticated API is rate-limited to 60/hr).
+func testUpdateCheckLive() {
+    guard getenv("BA_TEST_NETWORK") != nil else { return }
+    let manager = UpdateManager()
+    manager.checkForUpdates()
+    let deadline = Date().addingTimeInterval(15)
+    while manager.state == .checking && Date() < deadline {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+    }
+    expect(
+        manager.state == .upToDate || manager.state == .updateAvailable,
+        "live update check resolves (state=\(manager.state))"
+    )
+}
+
 // MARK: - FXSettings defaults + loading
 
 func testFXSettings() {
@@ -154,6 +187,8 @@ func testFXSettings() {
     expect(defaults.showInFullscreen == true, "default showInFullscreen = true")
     expect(defaults.enabled == true, "default enabled = true")
     expect(defaults.trailAlwaysVisible == true, "default trailAlwaysVisible = true")
+    expect(defaults.rightClickEnabled == true, "default rightClickEnabled = true")
+    expect(defaults.middleClickEnabled == true, "default middleClickEnabled = true")
     expect(defaults.clickBrightness == 1.0, "default clickBrightness = 1.0")
     expect(defaults.clickDiskOpacity == 1.0, "default clickDiskOpacity = 1.0")
     expect(defaults.triangleOpacity == 1.0, "default triangleOpacity = 1.0")
@@ -202,6 +237,8 @@ testParticleSystem()
 testFXSettings()
 testL10n()
 testSettingsStore()
+testVersionCompare()
+testUpdateCheckLive()
 
 print("passed: \(passed), failed: \(failures)")
 if failures > 0 {

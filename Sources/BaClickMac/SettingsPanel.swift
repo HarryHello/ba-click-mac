@@ -4,6 +4,7 @@ import SwiftUI
 /// Management panel (Apple native controls) opened from the menu bar icon.
 struct SettingsPanelView: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject var updates: UpdateManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -17,6 +18,12 @@ struct SettingsPanelView: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .help(L10n.t("trailHelp"))
+            Toggle(L10n.t("rightClickEffect"), isOn: store.binding(\.rightClickEnabled))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            Toggle(L10n.t("middleClickEffect"), isOn: store.binding(\.middleClickEnabled))
+                .toggleStyle(.switch)
+                .controlSize(.small)
 
             Divider()
 
@@ -44,6 +51,30 @@ struct SettingsPanelView: View {
 
             Divider()
 
+            // Update check + GitHub repo on one row, with a status line that
+            // always reserves space so the panel height stays stable.
+            HStack {
+                Button(L10n.t("checkForUpdates")) { updates.checkForUpdates() }
+                    .disabled(updateBusy)
+                Spacer()
+                Button(L10n.t("openGitHub")) { updates.openRepository() }
+            }
+            HStack {
+                statusText
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                if updates.state == .updateAvailable {
+                    Button(L10n.t("updateNow")) { updates.installUpdate() }
+                        .controlSize(.small)
+                }
+            }
+            .frame(height: 22)
+
+            Divider()
+
             HStack {
                 Spacer()
                 Button(L10n.t("quit")) { NSApp.terminate(nil) }
@@ -53,6 +84,35 @@ struct SettingsPanelView: View {
         .padding(.bottom, 16)
         .padding(.top, 30) // clear the native traffic lights (fullSizeContentView)
         .frame(width: 360)
+    }
+
+    private var updateBusy: Bool {
+        switch updates.state {
+        case .checking, .downloading, .installing:
+            return true
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        switch updates.state {
+        case .idle:
+            Text("")
+        case .checking:
+            Text(L10n.t("checkingUpdates"))
+        case .upToDate:
+            Text("\(L10n.t("upToDate")) v\(updates.latestVersion ?? AppInfo.version)")
+        case .updateAvailable:
+            Text("\(L10n.t("updateAvailable")) v\(updates.latestVersion ?? "")")
+        case .downloading:
+            Text("\(L10n.t("downloadingUpdate")) \(Int(updates.downloadProgress * 100))%")
+        case .installing:
+            Text(L10n.t("installingUpdate"))
+        case .failed(let message):
+            Text(message)
+        }
     }
 
     private func slider(_ title: String, value: Binding<Float>, range: ClosedRange<Float>) -> some View {
@@ -83,11 +143,11 @@ final class SettingsPanelController: NSObject {
     private var panel: NSPanel?
     private let cornerRadius: CGFloat = 14
 
-    init(store: SettingsStore) {
+    init(store: SettingsStore, updateManager: UpdateManager) {
         self.store = store
         super.init()
 
-        let hosting = NSHostingView(rootView: SettingsPanelView(store: store))
+        let hosting = NSHostingView(rootView: SettingsPanelView(store: store, updates: updateManager))
         let contentFitting = hosting.fittingSize
         let size = NSSize(
             width: max(Self.minPanelWidth, contentFitting.width),

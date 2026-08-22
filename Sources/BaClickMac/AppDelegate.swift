@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Single source of truth for settings (management panel + renderer).
     let store = SettingsStore()
+    /// GitHub update check + self-update (wired into the panel).
+    let updateManager = UpdateManager()
     private var settingsPanel: SettingsPanelController?
     /// Current render timer interval; follows the effect refresh rate.
     private var currentRenderInterval: TimeInterval = 1.0 / 60.0
@@ -106,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // to the renderer immediately and (if the render timer is running)
         // restarts it at the new refresh rate.
         renderer.applySettings(store.model)
-        settingsPanel = SettingsPanelController(store: store)
+        settingsPanel = SettingsPanelController(store: store, updateManager: updateManager)
         currentRenderInterval = 1.0 / Double(max(1, store.model.refreshRate))
         store.onChange = { [weak self] in
             guard let self else { return }
@@ -209,6 +211,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.onMouseDown = { [weak renderer, weak self] point in
             guard let self, self.store.model.enabled else { return }
             self.startRenderTimer() // wake the idle-stopped render loop
+            renderer?.particleSystem.addClick(at: point)
+        }
+        monitor.onRightMouseDown = { [weak renderer, weak self] point in
+            guard let self, self.store.model.enabled, self.store.model.rightClickEnabled else { return }
+            self.startRenderTimer()
+            renderer?.particleSystem.addClick(at: point)
+        }
+        monitor.onMiddleMouseDown = { [weak renderer, weak self] point in
+            guard let self, self.store.model.enabled, self.store.model.middleClickEnabled else { return }
+            self.startRenderTimer()
             renderer?.particleSystem.addClick(at: point)
         }
         monitor.onMouseDrag = { [weak self] _ in
@@ -330,7 +342,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func renderTick() {
         guard let overlayView, let renderer else { return }
         if store.model.enabled {
-            let dragging = (NSEvent.pressedMouseButtons & 1) != 0
+            // Bit 0 = left, bit 1 = right, bit 2 = middle (button 3). Any held
+            // button feeds the trail so right/middle drags also draw it when
+            // "always visible" is off.
+            let dragging = (NSEvent.pressedMouseButtons & 0b111) != 0
             if store.model.trailAlwaysVisible || dragging {
                 renderer.particleSystem.addTrailPoint(
                     at: ScreenGeometry.shared.convert(NSEvent.mouseLocation)

@@ -21,7 +21,7 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 | Fullscreen | NSPanel (`fullScreenAuxiliary`) is carried into fullscreen apps' Spaces automatically — works over QQ / Chrome fullscreen video | NSPanel（`fullScreenAuxiliary`）自动进入全屏应用的 Space —— QQ / Chrome 全屏视频下均正常 |
 | Live tuning | Edit `settings.json`, hot-reloaded every 0.5 s; partial files allowed | 编辑 `settings.json`，每 0.5 秒热重载；允许只写要改的键 |
 | Power saving | Stops rendering when idle; no GPU work behind hidden fullscreen (`showInFullscreen=false`) | 闲置时停止渲染；隐藏全屏时不产生 GPU 开销（`showInFullscreen=false`） |
-| Management panel | Apple-native panel via the menu bar icon: effect on/off, launch at login, trail mode/thickness/glow, click size/brightness/opacity, refresh rate | 菜单栏图标打开的 Apple 原生管理面板：效果开关、开机自启、尾迹模式/粗细/辉光、点击大小/亮度/透明度、刷新率 |
+| Management panel | Apple-native panel via the menu bar icon: effect on/off, launch at login, trail mode/thickness/glow, click size/brightness/opacity, refresh rate, right/middle-click toggles, update check + GitHub repo | 菜单栏图标打开的 Apple 原生管理面板：效果开关、开机自启、尾迹模式/粗细/辉光、点击大小/亮度/透明度、刷新率、右键/中键开关、检查更新 + GitHub 仓库 |
 | i18n | Chinese/English UI, auto-detects the system language (`zh*` → 中文) | 中英双语界面，自动检测系统语言（`zh*` → 中文） |
 | No Dock icon | Runs as an `.accessory` app (menu bar only), so the Dock stays clean | `.accessory` 模式运行（仅菜单栏），Dock 干净 |
 
@@ -38,6 +38,8 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - ✅ Idle power saving (render stops when nothing is on screen) / 闲置省电（无内容时停止渲染）
 - ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`) / 单元测试 + CI
 - ✅ Menu bar icon + management panel (no Dock icon) / 菜单栏图标 + 管理面板（无 Dock 图标）
+- ✅ Right-click + middle-click effects (independently toggleable) / 右键 + 中键点击效果（可独立开关）
+- ✅ Update check + self-update (falls back to GitHub Releases) / 检查更新 + 自动更新（失败时跳转 Releases）
 - ✅ Launch at login / 开机自启
 - ⏳ Multi-monitor (currently only the main screen) / 多显示器（目前仅主屏幕）
 
@@ -112,7 +114,9 @@ The app loads `settings.json` from the **current working directory**, the **exec
 | `bloomFalloff` | `0.35` | Rational falloff knee `a = lum/(lum+k)` / 有理式衰减拐点 |
 | `bloomBoost` | `1.2` | Extra glow overlay brightness / 辉光叠加额外亮度 |
 | `enabled` | `true` | Master effect switch / 效果总开关 |
-| `trailAlwaysVisible` | `true` | Trail on any mouse move; `false` = only while left-dragging / 尾迹始终显示；`false` = 仅左键拖动时 |
+| `trailAlwaysVisible` | `true` | Trail on any mouse move; `false` = only while dragging any button / 尾迹始终显示；`false` = 仅按住任意鼠标键拖动时 |
+| `rightClickEnabled` | `true` | Spawn the click effect on right-click (button 2) / 右键点击触发效果 |
+| `middleClickEnabled` | `true` | Spawn the click effect on middle-click (button 3) / 中键点击触发效果 |
 | `clickBrightness` | `1.0` | Click effect brightness / 点击效果亮度 |
 | `clickDiskOpacity` | `1.0` | Click disk opacity (higher = more opaque) / 点击圆盘不透明度（越高越实） |
 | `triangleOpacity` | `1.0` | Triangle particle opacity (higher = more opaque) / 三角粒子不透明度（越高越实） |
@@ -161,8 +165,12 @@ Every runtime setting touches the same places — keep them in sync:
   **渲染**——离屏 HDR 场景（`rgba16Float`）→ `MXFinalBloom` 金字塔（预过滤 → 降采样 → 升采样）→ 在锐利核心之上做叠加。屏幕无内容时完全跳过辉光。
 - **Management panel** — a SwiftUI panel in a **titled, non-activating NSPanel** with a **native Liquid Glass body** (`NSGlassEffectView`, macOS 26+; resolved via `NSClassFromString` so the code still builds against older SDKs). On older systems it falls back to a classic `NSVisualEffectView` (`.menu` material) glass. `titlebarAppearsTransparent` + `fullSizeContentView` keep the native traffic lights and title-bar dragging while the window stays transparent so the glass shows through. It becomes key for controls but never activates the app, so the global mouse monitor keeps feeding the overlay while you tune. Clicking the menu bar icon shows a menu (打开管理面板 / 退出 BA Click). All changes apply to the renderer immediately and persist (debounced) to `settings.json`.
   **管理面板**——SwiftUI 面板，放在**带标题栏、非激活 NSPanel** 里，主体为**原生液态玻璃**（`NSGlassEffectView`，macOS 26+；用 `NSClassFromString` 运行时查找，旧 SDK 也能编译）。老系统自动回退经典 `NSVisualEffectView`（`.menu` 材质）玻璃。`titlebarAppearsTransparent` + `fullSizeContentView` 保留原生红绿灯与标题栏拖动，同时窗口透明让玻璃透出。控件可用但不激活应用，所以调参时全局鼠标监听仍在工作。点击菜单栏图标弹出菜单（打开管理面板 / 退出 BA Click）。所有改动即时生效并（防抖）持久化到 `settings.json`。
-- **Trail mode / 尾迹模式** — "始终显示尾迹" on: trail follows any mouse move. Off: trail only appears while the left button is held and dragging.
-  **尾迹模式**——开启"始终显示尾迹"：尾迹跟随任意鼠标移动；关闭：仅在按下左键并拖动时显示尾迹。
+- **Trail mode / 尾迹模式** — "始终显示尾迹" on: trail follows any mouse move. Off: trail only appears while a mouse button is held and dragging (left / right / middle all work).
+  **尾迹模式**——开启"始终显示尾迹"：尾迹跟随任意鼠标移动；关闭：仅在按住任意鼠标键并拖动时显示尾迹（左键 / 右键 / 中键均可）。
+- **Mouse buttons / 鼠标按键** — left, right and middle clicks all spawn the click effect; right/middle are independently toggleable in the panel (`rightClickEnabled` / `middleClickEnabled`).
+  **鼠标按键**——左键、右键、中键点击都会触发点击特效；右键 / 中键可在面板中独立开关（`rightClickEnabled` / `middleClickEnabled`）。
+- **Updates / 更新** — panel's **检查更新** queries the GitHub latest release API and compares versions; **立即更新** downloads the DMG for the running architecture, mounts it, replaces the app bundle via a detached helper (`~/Library/Logs/BA Click/update.log`) and relaunches. When auto-update isn't possible (raw binary / unwritable location / failure) it opens the GitHub Releases page. The **GitHub 仓库** button opens the repo home.
+  **更新**——面板**检查更新**查询 GitHub 最新 release 并与当前版本对比；**立即更新**下载对应架构 DMG → 挂载 → 通过分离助手脚本替换应用包（日志在 `~/Library/Logs/BA Click/update.log`）→ 自动重启。无法自动更新（裸二进制 / 目录不可写 / 失败）时跳转 GitHub Releases 页面；**GitHub 仓库**按钮打开仓库主页。
 - **Launch at login / 开机自启** — writes a user LaunchAgent plist (`~/Library/LaunchAgents/local.ba-click-mac.plist`) pointing at the current executable; toggled from the panel.
   **开机自启**——写入用户 LaunchAgent plist（`~/Library/LaunchAgents/local.ba-click-mac.plist`）指向当前可执行文件；由面板开关控制。
 
@@ -184,6 +192,8 @@ Sources/BaClickMac/
   ResourceLocator.swift      Shared bundled-resource lookup
   SettingsStore.swift        ObservableObject settings store + launch-at-login
   SettingsPanel.swift        SwiftUI management panel + non-activating NSPanel
+  UpdateManager.swift        GitHub update check + self-update (helper script)
+  AppInfo.swift              App version + GitHub links
   L10n.swift                 Chinese/English strings, system-language detection
 Resources/
   AppIcon.icns               macOS app icon (used by the .app bundle)
