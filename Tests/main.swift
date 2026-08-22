@@ -160,13 +160,29 @@ func testVersionCompare() {
 
 // MARK: - Update check (live network; opt-in via BA_TEST_NETWORK=1)
 
-/// Exercises the real GitHub latest-release API. Skipped unless
-/// BA_TEST_NETWORK is set (unauthenticated API is rate-limited to 60/hr).
+/// Exercises the real GitHub latest-release API + proxy fallback. Skipped
+/// unless BA_TEST_NETWORK is set (unauthenticated API is rate-limited to 60/hr).
 func testUpdateCheckLive() {
     guard getenv("BA_TEST_NETWORK") != nil else { return }
+
+    // Proxy URL construction (no network).
+    for prefix in GitHubProxy.api {
+        expect(
+            URL(string: prefix + AppInfo.latestReleaseAPI.absoluteString) != nil,
+            "proxy API URL builds: \(prefix)"
+        )
+    }
+    for prefix in GitHubProxy.download {
+        expect(
+            URL(string: prefix + "https://github.com/x/y/releases/download/v1/a.dmg") != nil,
+            "proxy download URL builds: \(prefix)"
+        )
+    }
+
+    // Full checkForUpdates() flow: direct, then proxies.
     let manager = UpdateManager()
     manager.checkForUpdates()
-    let deadline = Date().addingTimeInterval(15)
+    let deadline = Date().addingTimeInterval(20)
     while manager.state == .checking && Date() < deadline {
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
     }
@@ -174,6 +190,23 @@ func testUpdateCheckLive() {
         manager.state == .upToDate || manager.state == .updateAvailable,
         "live update check resolves (state=\(manager.state))"
     )
+
+    // Live-verify the primary proxy forwards the latest-release API JSON.
+    guard let proxyURL = URL(string: GitHubProxy.api[0] + AppInfo.latestReleaseAPI.absoluteString) else { return }
+    var request = URLRequest(url: proxyURL)
+    request.timeoutInterval = 15
+    let semaphore = DispatchSemaphore(value: 0)
+    var proxyOK = false
+    URLSession.shared.dataTask(with: request) { data, _, _ in
+        if let data,
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           object["tag_name"] as? String != nil {
+            proxyOK = true
+        }
+        semaphore.signal()
+    }.resume()
+    _ = semaphore.wait(timeout: .now() + 20)
+    expect(proxyOK, "gh-proxy.org forwards the latest-release API")
 }
 
 // MARK: - FXSettings defaults + loading

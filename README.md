@@ -171,6 +171,8 @@ Every runtime setting touches the same places — keep them in sync:
   **鼠标按键**——左键、右键、中键点击都会触发点击特效；右键 / 中键可在面板中独立开关（`rightClickEnabled` / `middleClickEnabled`）。
 - **Updates / 更新** — panel's **检查更新** queries the GitHub latest release API and compares versions; **立即更新** downloads the DMG for the running architecture, mounts it, replaces the app bundle via a detached helper (`~/Library/Logs/BA Click/update.log`) and relaunches. When auto-update isn't possible (raw binary / unwritable location / failure) it opens the GitHub Releases page. The **GitHub 仓库** button opens the repo home.
   **更新**——面板**检查更新**查询 GitHub 最新 release 并与当前版本对比；**立即更新**下载对应架构 DMG → 挂载 → 通过分离助手脚本替换应用包（日志在 `~/Library/Logs/BA Click/update.log`）→ 自动重启。无法自动更新（裸二进制 / 目录不可写 / 失败）时跳转 GitHub Releases 页面；**GitHub 仓库**按钮打开仓库主页。
+- **GitHub proxies / GitHub 代理** — when the direct connection to `api.github.com` / `github.com` is blocked or fails, the update check and the DMG download fall back to the configured proxies in order (`AppInfo.swift` → `GitHubProxy`). Verified reachable: `gh-proxy.org`, `gh-proxy.com` (API + download), `ghproxy.net`, `ghfast.top` (download only).
+  **GitHub 代理**——当直连 `api.github.com` / `github.com` 被墙或失败时，检查更新与 DMG 下载会按序回退到配置的代理（`AppInfo.swift` 里的 `GitHubProxy`）。实测可用：`gh-proxy.org`、`gh-proxy.com`（API + 下载）、`ghproxy.net`、`ghfast.top`（仅下载）。
 - **Launch at login / 开机自启** — writes a user LaunchAgent plist (`~/Library/LaunchAgents/local.ba-click-mac.plist`) pointing at the current executable; toggled from the panel.
   **开机自启**——写入用户 LaunchAgent plist（`~/Library/LaunchAgents/local.ba-click-mac.plist`）指向当前可执行文件；由面板开关控制。
 

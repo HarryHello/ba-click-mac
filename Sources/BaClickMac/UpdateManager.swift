@@ -41,23 +41,24 @@ final class UpdateManager: ObservableObject {
     // MARK: - Public actions
 
     /// Query the GitHub API for the latest published release and compare it
-    /// with the running version. Never throws — failures surface as `.failed`.
+    /// with the running version. Tries the direct API URL first, then each
+    /// GitHub proxy in order when the direct connection fails (blocked
+    /// network / timeout). Never throws — failures surface as `.failed`.
     func checkForUpdates() {
         guard state != .checking else { return }
         state = .checking
         latestVersion = nil
         latestRelease = nil
 
-        var request = URLRequest(url: AppInfo.latestReleaseAPI)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("BA-Click-mac/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
+        var urls = [AppInfo.latestReleaseAPI]
+        urls += GitHubProxy.api.compactMap {
+            URL(string: $0 + AppInfo.latestReleaseAPI.absoluteString)
+        }
 
-        let task = session.dataTask(with: request) { [weak self] data, _, error in
+        fetchReleaseJSON(urls: urls, index: 0) { [weak self] object in
             DispatchQueue.main.async {
                 guard let self else { return }
-                guard let data, error == nil,
-                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let tag = object["tag_name"] as? String else {
+                guard let object, let tag = object["tag_name"] as? String else {
                     self.state = .failed(L10n.t("updateCheckFailed"))
                     return
                 }
@@ -67,6 +68,33 @@ final class UpdateManager: ObservableObject {
                 let current = UpdateManager.normalizeVersion(AppInfo.version)
                 self.state = UpdateManager.compare(current, latest) < 0 ? .updateAvailable : .upToDate
             }
+        }
+    }
+
+    /// Fetch the latest-release JSON, walking `urls` (direct then proxies) and
+    /// stopping at the first success. Each attempt is capped at 8s so a dead
+    /// direct connection degrades to the first working proxy quickly.
+    private func fetchReleaseJSON(
+        urls: [URL],
+        index: Int,
+        completion: @escaping ([String: Any]?) -> Void
+    ) {
+        guard index < urls.count else {
+            completion(nil)
+            return
+        }
+        var request = URLRequest(url: urls[index])
+        request.timeoutInterval = 8
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("BA-Click-mac/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
+        let task = session.dataTask(with: request) { [weak self] data, _, error in
+            if let data, error == nil,
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               object["tag_name"] as? String != nil {
+                completion(object)
+                return
+            }
+            self?.fetchReleaseJSON(urls: urls, index: index + 1, completion: completion)
         }
         task.resume()
     }
@@ -95,6 +123,7 @@ final class UpdateManager: ObservableObject {
             fallbackToReleases()
             return
         }
+
         // Auto-update requires a real .app bundle in a writable location.
         let bundlePath = Bundle.main.bundlePath
         guard bundlePath.hasSuffix(".app"),
@@ -105,16 +134,35 @@ final class UpdateManager: ObservableObject {
 
         state = .downloading
         downloadProgress = 0
-        let task = session.downloadTask(with: url) { [weak self] tempURL, _, error in
+        // Try the direct GitHub download URL first, then each proxy (the
+        // proxies forward github.com/.../releases/download/... URLs).
+        var urls = [url]
+        urls += GitHubProxy.download.compactMap { URL(string: $0 + urlString) }
+        downloadDMG(urls: urls, index: 0, currentApp: bundlePath)
+    }
+
+    /// Download the update DMG, walking `urls` (direct then proxies) and
+    /// stopping at the first success. On total failure, falls back to opening
+    /// the Releases page.
+    private func downloadDMG(urls: [URL], index: Int, currentApp: String) {
+        guard index < urls.count else {
+            progressObservation = nil
+            state = .failed(L10n.t("updateDownloadFailed"))
+            openReleases()
+            return
+        }
+        var request = URLRequest(url: urls[index])
+        request.timeoutInterval = 30
+        request.setValue("BA-Click-mac/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
+        let task = session.downloadTask(with: request) { [weak self] tempURL, _, error in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.progressObservation = nil
-                guard let tempURL, error == nil else {
-                    self.state = .failed(L10n.t("updateDownloadFailed"))
-                    self.openReleases()
-                    return
+                if let tempURL, error == nil {
+                    self.installFromDMG(at: tempURL, currentApp: currentApp)
+                } else {
+                    self.downloadDMG(urls: urls, index: index + 1, currentApp: currentApp)
                 }
-                self.installFromDMG(at: tempURL, currentApp: bundlePath)
             }
         }
         progressObservation = task.progress.observe(\.fractionCompleted) { [weak self] progress, _ in

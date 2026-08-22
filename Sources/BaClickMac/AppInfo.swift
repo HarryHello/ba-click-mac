@@ -28,3 +28,25 @@ enum AppInfo {
         #endif
     }
 }
+
+/// GitHub access proxies (URL prefixes): the app tries the direct URL first
+/// and falls back to these when the direct connection is blocked or fails.
+///
+/// Kept to the ones verified reachable (probed live); the two `api` entries
+/// forward `api.github.com` JSON (needed for the version check), while
+/// `download` also includes proxies that only forward release-asset
+/// downloads. `gh-proxy.org` is the user-recommended one and comes first.
+enum GitHubProxy {
+    /// Proxies that forward api.github.com JSON (version check).
+    static let api: [String] = [
+        "https://gh-proxy.org/",
+        "https://gh-proxy.com/",
+    ]
+    /// Proxies that forward release-asset downloads (DMG download).
+    static let download: [String] = [
+        "https://gh-proxy.org/",
+        "https://gh-proxy.com/",
+        "https://ghproxy.net/",
+        "https://ghfast.top/",
+    ]
+}
