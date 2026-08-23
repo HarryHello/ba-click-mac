@@ -2,8 +2,24 @@ import AppKit
 import MetalKit
 import QuartzCore
 import CoreGraphics
+import simd
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private final class Overlay {
+        let window: NSWindow
+        let view: TransparentMTKView
+        let renderer: Renderer
+        var screenFrame: NSRect
+
+        init(window: NSWindow, view: TransparentMTKView, renderer: Renderer, screenFrame: NSRect) {
+            self.window = window
+            self.view = view
+            self.renderer = renderer
+            self.screenFrame = screenFrame
+        }
+    }
+
+    private var overlays: [Overlay] = []
     private var window: NSWindow?
     private var overlayView: TransparentMTKView?
     private var mouseMonitor: MouseMonitor?
@@ -39,81 +55,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
 
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else {
+        guard !NSScreen.screens.isEmpty || NSScreen.main != nil else {
             bail("No screen available")
         }
-
-        let frame = screen.frame
-
-        // Single persistent NSPanel (the configuration that actually works).
-        // Being a fullScreenAuxiliary panel means macOS carries it INTO the
-        // fullscreen app's Space automatically — no detection/switch needed.
-        // .stationary and .ignoresCycle are restored to keep the normal-desktop
-        // behavior as close to the original overlay as possible.
-        let panel = NSPanel(
-            contentRect: frame,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false,
-            screen: screen
-        )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.level = .floating
-        panel.isFloatingPanel = true
-        panel.becomesKeyOnlyIfNeeded = true
-        panel.hidesOnDeactivate = false
-        panel.collectionBehavior = [
-            .canJoinAllSpaces,
-            .fullScreenAuxiliary,
-            .stationary,
-            .ignoresCycle
-        ]
-        panel.ignoresMouseEvents = true
-        panel.isReleasedWhenClosed = false
-        window = panel
 
         guard let device = MTLCreateSystemDefaultDevice() else {
             bail("Metal is not supported on this Mac")
         }
 
-        let overlayView = TransparentMTKView(frame: frame, device: device)
-        overlayView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-        overlayView.layer?.isOpaque = false
-        overlayView.layer?.backgroundColor = NSColor.clear.cgColor
-        overlayView.framebufferOnly = true
-        overlayView.colorPixelFormat = .bgra8Unorm
-        overlayView.preferredFramesPerSecond = 60
-        // Manual render loop: pause the MTKView's internal display link and
-        // drive draw() ourselves (see startRenderTimer). The display link
-        // stalls randomly after Space/fullscreen transitions; a self-driven
-        // timer keeps rendering deterministic.
-        overlayView.isPaused = true
-        overlayView.enableSetNeedsDisplay = false
-        self.overlayView = overlayView
-
-        guard let renderer = Renderer(view: overlayView) else {
-            bail("Failed to initialize Metal renderer (shader compile or resource load failed)")
+        overlays = makeOverlays(device: device)
+        guard let primaryOverlay = overlays.first else {
+            bail("Failed to initialize overlay windows")
         }
-        self.renderer = renderer
-        window?.contentView = overlayView
-        window?.orderFrontRegardless()
+        window = primaryOverlay.window
+        overlayView = primaryOverlay.view
+        renderer = primaryOverlay.renderer
+        overlays.forEach { $0.window.orderFrontRegardless() }
 
         self.reapplyTransparency()
 
         // Management panel + live settings wiring: every panel change applies
         // to the renderer immediately and (if the render timer is running)
         // restarts it at the new refresh rate.
-        renderer.applySettings(store.model)
         settingsPanel = SettingsPanelController(store: store)
         currentRenderInterval = 1.0 / Double(max(1, store.model.refreshRate))
         store.onChange = { [weak self] in
             guard let self else { return }
-            self.renderer?.applySettings(self.store.model)
+            self.applySettingsToRenderers()
             self.syncRenderTimer()
             if !self.store.model.enabled {
-                self.renderer?.particleSystem.clear()
+                self.overlays.forEach { $0.renderer.particleSystem.clear() }
             }
         }
 
@@ -133,8 +104,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let recover: (Notification) -> Void = { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
-                // Display layout may have changed: re-read the screen frame.
-                ScreenGeometry.shared.refresh()
+                // Display layout may have changed: re-read the virtual desktop
+                // frame and resize the overlay to cover every attached screen.
+                self.updateOverlayGeometry()
                 // Don't fight the intentional hide used for fullscreen apps.
                 guard !self.fullscreenHidden else { return }
                 self.startRenderTimer()
@@ -143,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // 0.5s housekeeping tick.
                 self.updateFullscreenState()
                 self.reapplyTransparency()
-                self.overlayView?.window?.orderFrontRegardless()
+                self.overlays.forEach { $0.window.orderFrontRegardless() }
             }
         }
         self.spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -182,12 +154,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // it only touches the label when the HUD is actually shown.
         if getenv("BA_SHOW_HUD") != nil {
             let label = NSTextField(labelWithString: "ba-click status")
-            label.frame = NSRect(x: 20, y: frame.height - 50, width: 800, height: 26)
+            label.frame = NSRect(x: 20, y: primaryOverlay.screenFrame.height - 50, width: 800, height: 26)
             label.isBezeled = false
             label.drawsBackground = false
             label.textColor = .white
             label.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
-            overlayView.addSubview(label)
+            primaryOverlay.view.addSubview(label)
             self.statusLabel = label
         }
         let timer = Timer(timeInterval: Self.housekeepingInterval, repeats: true) { [weak self] _ in
@@ -206,10 +178,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sampling happens every render tick (renderTick) so the trail stays
         // dense even when events are coalesced. The click still feeds directly.
         let monitor = MouseMonitor()
-        monitor.onMouseDown = { [weak renderer, weak self] point in
+        monitor.onMouseDown = { [weak self] point in
             guard let self, self.store.model.enabled else { return }
             self.startRenderTimer() // wake the idle-stopped render loop
-            renderer?.particleSystem.addClick(at: point)
+            if let routed = self.overlay(containing: point) {
+                routed.overlay.renderer.particleSystem.addClick(at: routed.localPoint)
+            }
         }
         monitor.onMouseDrag = { [weak self] _ in
             guard let self, self.store.model.enabled else { return }
@@ -228,14 +202,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the click animation (disk -> arcs -> shrink) can be inspected in
         // isolation without the cursor trail.
         if getenv("BA_CLICK_LOOP") != nil {
-            let center = SIMD2<Float>(
-                Float(frame.midX),
-                Float(frame.midY)
-            )
-            let loop = Timer(timeInterval: 0.9, repeats: true) { [weak renderer, weak self] _ in
+            let loop = Timer(timeInterval: 0.9, repeats: true) { [weak self] _ in
                 guard let self, self.store.model.enabled else { return }
+                guard let screenFrame = NSScreen.main?.frame ?? NSScreen.screens.first?.frame else { return }
+                let centerPoint = NSPoint(x: screenFrame.midX, y: screenFrame.midY)
                 self.startRenderTimer()
-                renderer?.particleSystem.addClick(at: center)
+                if let routed = self.overlay(containing: centerPoint) {
+                    routed.overlay.renderer.particleSystem.addClick(at: routed.localPoint)
+                }
             }
             RunLoop.main.add(loop, forMode: .common)
             clickLoopTimer = loop
@@ -247,16 +221,139 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // another application.
     }
 
+    private func makeOverlays(device: MTLDevice) -> [Overlay] {
+        let screens = NSScreen.screens.isEmpty ? [NSScreen.main].compactMap { $0 } : NSScreen.screens
+        return screens.compactMap { screen in
+            makeOverlay(device: device, screen: screen)
+        }
+    }
+
+    private func makeOverlay(device: MTLDevice, screen: NSScreen) -> Overlay? {
+        let frame = screen.frame
+        let panel = NSPanel(
+            // When a specific NSScreen is supplied, AppKit treats contentRect
+            // as screen-local. Passing the global screen frame would apply the
+            // screen origin twice for displays left/below the main screen.
+            contentRect: NSRect(origin: .zero, size: frame.size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false,
+            screen: screen
+        )
+        panel.setFrame(frame, display: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.level = .floating
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = true
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [
+            .canJoinAllSpaces,
+            .fullScreenAuxiliary,
+            .stationary,
+            .ignoresCycle
+        ]
+        panel.ignoresMouseEvents = true
+        panel.isReleasedWhenClosed = false
+
+        let view = TransparentMTKView(frame: NSRect(origin: .zero, size: frame.size), device: device)
+        view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        view.layer?.isOpaque = false
+        view.layer?.backgroundColor = NSColor.clear.cgColor
+        view.framebufferOnly = true
+        view.colorPixelFormat = .bgra8Unorm
+        view.preferredFramesPerSecond = 60
+        view.isPaused = true
+        view.enableSetNeedsDisplay = false
+
+        guard let renderer = Renderer(view: view) else { return nil }
+        renderer.applySettings(store.model)
+        panel.contentView = view
+        return Overlay(window: panel, view: view, renderer: renderer, screenFrame: frame)
+    }
+
+    private func applySettingsToRenderers() {
+        overlays.forEach { $0.renderer.applySettings(store.model) }
+    }
+
+    private func overlay(containing point: NSPoint) -> (overlay: Overlay, localPoint: SIMD2<Float>)? {
+        let geometry = ScreenGeometry.shared
+        if let overlay = overlays.first(where: { Self.contains(point, in: $0.screenFrame) }) {
+            return (overlay, geometry.convert(point, in: overlay.screenFrame))
+        }
+        guard let nearest = overlays.min(by: {
+            Self.distanceSquared(from: point, to: $0.screenFrame) <
+                Self.distanceSquared(from: point, to: $1.screenFrame)
+        }) else { return nil }
+        return (nearest, geometry.convert(point, in: nearest.screenFrame))
+    }
+
+    private static func contains(_ point: NSPoint, in frame: NSRect) -> Bool {
+        point.x >= frame.minX &&
+            point.x <= frame.maxX &&
+            point.y >= frame.minY &&
+            point.y <= frame.maxY
+    }
+
+    private static func distanceSquared(from point: NSPoint, to frame: NSRect) -> CGFloat {
+        let clampedX = min(max(point.x, frame.minX), frame.maxX)
+        let clampedY = min(max(point.y, frame.minY), frame.maxY)
+        let dx = point.x - clampedX
+        let dy = point.y - clampedY
+        return dx * dx + dy * dy
+    }
+
     /// Re-assert the CAMetalLayer transparency. The layer can reset its
     /// opaque/background state when the view is re-attached (after a Spaces
     /// switch or when moved between primary window and fullscreen panel),
     /// which otherwise makes the overlay disappear.
     private func reapplyTransparency() {
-        guard let view = overlayView else { return }
         DispatchQueue.main.async {
-            view.wantsLayer = true
-            view.layer?.isOpaque = false
-            view.layer?.backgroundColor = NSColor.clear.cgColor
+            for overlay in self.overlays {
+                overlay.view.wantsLayer = true
+                overlay.view.layer?.isOpaque = false
+                overlay.view.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+        }
+    }
+
+    /// Keep one transparent overlay aligned with each attached display.
+    private func updateOverlayGeometry() {
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return }
+        let frames = screens.map(\.frame)
+        let needsRebuild = frames.count != overlays.count ||
+            zip(frames, overlays.map(\.screenFrame)).contains { !$0.equalTo($1) }
+
+        if needsRebuild, let device = overlayView?.device ?? MTLCreateSystemDefaultDevice() {
+            let label = statusLabel
+            overlays.forEach { $0.window.orderOut(nil) }
+            overlays = screens.compactMap { makeOverlay(device: device, screen: $0) }
+            guard let primaryOverlay = overlays.first else { return }
+            window = primaryOverlay.window
+            overlayView = primaryOverlay.view
+            renderer = primaryOverlay.renderer
+            if let label {
+                label.removeFromSuperview()
+                label.frame.origin.y = primaryOverlay.screenFrame.height - 50
+                primaryOverlay.view.addSubview(label)
+            }
+            if !fullscreenHidden {
+                overlays.forEach { $0.window.orderFrontRegardless() }
+            }
+            return
+        }
+
+        for (overlay, screen) in zip(overlays, screens) {
+            let frame = screen.frame
+            overlay.screenFrame = frame
+            overlay.window.setFrame(frame, display: true)
+            overlay.view.frame = NSRect(origin: .zero, size: frame.size)
+            overlay.view.bounds = NSRect(origin: .zero, size: frame.size)
+        }
+        if let first = overlays.first {
+            statusLabel?.frame.origin.y = first.screenFrame.height - 50
         }
     }
 
@@ -265,7 +362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the timer is running but no draw callback has fired for >0.5s, force
     /// one frame immediately and reassert the layer.
     private func checkStall() {
-        guard let renderer, let overlayView else { return }
+        guard !overlays.isEmpty else { return }
         // If we intentionally stopped rendering for a fullscreen app, that's
         // not a stall — don't wake it up to burn GPU behind the fullscreen app.
         if fullscreenHidden { return }
@@ -273,13 +370,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // startRenderTimer), that's not a stall either.
         guard renderTimer != nil || renderDisplayLink != nil else { return }
         let now = CACurrentMediaTime()
-        if renderer.lastDrawTime == 0 || now - renderer.lastDrawTime > Self.stallThreshold {
+        let stalled = overlays.contains { overlay in
+            overlay.renderer.lastDrawTime == 0 || now - overlay.renderer.lastDrawTime > Self.stallThreshold
+        }
+        if stalled {
             // The driver may have stalled (e.g. display link after a Space
             // switch): rebuild it and force a frame now.
             stopRenderTimer()
             startRenderTimer()
-            overlayView.draw()
-            overlayView.window?.orderFrontRegardless()
+            overlays.forEach {
+                $0.view.draw()
+                $0.window.orderFrontRegardless()
+            }
             reapplyTransparency()
         }
     }
@@ -295,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// up again.
     private func startRenderTimer() {
         guard renderTimer == nil, renderDisplayLink == nil, let overlayView else { return }
-        overlayView.isPaused = true
+        overlays.forEach { $0.view.isPaused = true }
         if #available(macOS 14.0, *) {
             let link = overlayView.displayLink(target: self, selector: #selector(renderTick))
             link.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
@@ -328,18 +430,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (smooth curves, no polylines) even when the OS coalesces mouse-moved
     /// events while the main thread is busy rendering.
     @objc private func renderTick() {
-        guard let overlayView, let renderer else { return }
+        guard !overlays.isEmpty else { return }
         if store.model.enabled {
             let dragging = (NSEvent.pressedMouseButtons & 1) != 0
             if store.model.trailAlwaysVisible || dragging {
-                renderer.particleSystem.addTrailPoint(
-                    at: ScreenGeometry.shared.convert(NSEvent.mouseLocation)
-                )
+                let point = NSEvent.mouseLocation
+                if let routed = overlay(containing: point) {
+                    routed.overlay.renderer.particleSystem.addTrailPoint(at: routed.localPoint)
+                }
             }
         }
-        overlayView.draw()
+        overlays.forEach { $0.view.draw() }
         // Nothing left on screen -> stop until the next interaction.
-        if !renderer.particleSystem.hasActiveParticles() {
+        if !overlays.contains(where: { $0.renderer.particleSystem.hasActiveParticles() }) {
             stopRenderTimer()
         }
     }
@@ -360,8 +463,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Fullscreen handling for the single persistent NSPanel:
-    ///  - showInFullscreen=true (default): the panel is already a
+    /// Fullscreen handling for the persistent per-screen NSPanels:
+    ///  - showInFullscreen=true (default): each panel is already a
     ///    fullScreenAuxiliary member of every Space, so macOS carries it into
     ///    the fullscreen app's Space automatically — nothing to do here.
     ///  - showInFullscreen=false: when a fullscreen app is active, hide + stop
@@ -378,12 +481,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if fullscreen {
             fullscreenHidden = true
             stopRenderTimer()
-            window?.orderOut(nil)
+            overlays.forEach { $0.window.orderOut(nil) }
         } else {
             fullscreenHidden = false
             startRenderTimer()
-            window?.level = .floating
-            window?.orderFrontRegardless()
+            overlays.forEach {
+                $0.window.level = .floating
+                $0.window.orderFrontRegardless()
+            }
             reapplyTransparency()
         }
     }
@@ -392,9 +497,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// window covering the screen (layer 0, on-screen, screen-sized bounds).
     /// Bounds/layer need no screen-recording permission (only names do).
     private func isFullscreenAppActive() -> Bool {
-        guard let screenFrame = window?.screen?.frame else { return false }
-        let minW = screenFrame.width * 0.97
-        let minH = screenFrame.height * 0.97
+        let screenFrames = NSScreen.screens.map(\.frame)
+        guard !screenFrames.isEmpty else { return false }
         guard let list = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly], kCGNullWindowID
         ) as? [[String: Any]] else { return false }
@@ -409,7 +513,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let bounds = info[kCGWindowBounds as String] as? [String: Any],
                   let w = bounds["Width"] as? Double,
                   let h = bounds["Height"] as? Double else { continue }
-            if w >= minW && h >= minH {
+            let coversAnyScreen = screenFrames.contains { frame in
+                w >= frame.width * 0.97 && h >= frame.height * 0.97
+            }
+            if coversAnyScreen {
                 return true
             }
         }

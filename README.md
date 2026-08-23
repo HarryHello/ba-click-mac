@@ -4,9 +4,9 @@
 >
 > **碧蓝档案点击特效 + 鼠标光迹** 的原生 macOS 版本，使用 **Swift + Metal** 实现。
 
-It creates a transparent, borderless, **click-through** overlay covering the main screen. Global mouse events are observed with AppKit's global event monitor and fed into a CPU particle system; Metal renders particles/trail with the **original game textures** (`Circle_01` / `Ring3` / `Triangle_02_1` / `Trail_03`) extracted from `ba-click-fx`, plus a ported **MXFinalBloom** glow.
+It creates transparent, borderless, **click-through** overlays covering all attached screens. Global mouse events are observed with AppKit's global event monitor and routed to the overlay for the display under the cursor; Metal renders particles/trail with the **original game textures** (`Circle_01` / `Ring3` / `Triangle_02_1` / `Trail_03`) extracted from `ba-click-fx`, plus a ported **MXFinalBloom** glow.
 
-它创建一个覆盖主屏幕的透明、无边框、**可点击穿透**的覆盖层。全局鼠标事件通过 AppKit 的全局事件监听器收集，交给 CPU 粒子系统模拟；Metal 使用从 `ba-click-fx` 解包出的**原始游戏贴图**（`Circle_01` / `Ring3` / `Triangle_02_1` / `Trail_03`）渲染粒子与光迹，并移植了 **MXFinalBloom** 辉光。
+它为所有已连接屏幕创建透明、无边框、**可点击穿透**的覆盖层。全局鼠标事件通过 AppKit 的全局事件监听器收集，并按光标所在显示器分发给对应覆盖层；Metal 使用从 `ba-click-fx` 解包出的**原始游戏贴图**（`Circle_01` / `Ring3` / `Triangle_02_1` / `Trail_03`）渲染粒子与光迹，并移植了 **MXFinalBloom** 辉光。
 
 ---
 
@@ -14,7 +14,7 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 
 | | English | 中文 |
 |---|---|---|
-| Overlay | Transparent click-through overlay on the main screen; never steals focus | 主屏幕透明可穿透覆盖层；从不抢占焦点 |
+| Overlay | Transparent click-through overlays on all attached screens; never steals focus | 所有屏幕透明可穿透覆盖层；从不抢占焦点 |
 | Click effect | Center disk → two arcs (弧光) from random sides spread/converge → disk fades → arcs shrink; flying shards | 中心圆盘 → 随机两侧弧光相向扩散/汇聚 → 圆盘消失 → 弧光收缩；飞散碎片 |
 | Trail | Cursor trail with width taper (tail thins, color stays constant) | 鼠标光迹，尾部收细（颜色不变） |
 | Glow | Ported original `MXFinalBloom` (multi-level pyramid, prefilter → downsample → upsample → additive) | 移植原版 `MXFinalBloom`（多级金字塔：预过滤 → 降采样 → 升采样 → 叠加） |
@@ -33,13 +33,13 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - ✅ Cursor trail with width taper / 带收细的鼠标光迹
 - ✅ Original game textures + Unity particle curves / 原始游戏贴图 + Unity 粒子曲线
 - ✅ Multi-pass MXFinalBloom (HDR scene → pyramid → additive glow) / 多级 MXFinalBloom 辉光（HDR 场景 → 金字塔 → 叠加辉光）
-- ✅ Works over fullscreen apps (single persistent NSPanel) / 全屏应用之上正常显示（单一常驻 NSPanel）
+- ✅ Works over fullscreen apps (persistent per-screen NSPanels) / 全屏应用之上正常显示（每屏常驻 NSPanel）
 - ✅ Manual 60 fps render loop (display-link stalls fixed) / 手动 60fps 渲染循环（修复 display link 停滞）
 - ✅ Idle power saving (render stops when nothing is on screen) / 闲置省电（无内容时停止渲染）
 - ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`) / 单元测试 + CI
 - ✅ Menu bar icon + management panel (no Dock icon) / 菜单栏图标 + 管理面板（无 Dock 图标）
 - ✅ Launch at login / 开机自启
-- ⏳ Multi-monitor (currently only the main screen) / 多显示器（目前仅主屏幕）
+- ✅ Multi-monitor overlays, one per attached display / 多显示器覆盖层（每个显示器一个）
 
 > **App icon / 应用图标**: authored in the modern **Icon Composer** (macOS 26+ / Xcode 26) as `icons/icon.icon` (an `icon.json` manifest + layered `Assets/*.svg`). The format is **full-bleed** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing in Icon Composer, regenerate with `./tools/build-icon.sh` (renders via the bundled `ictool` CLI, produces `Resources/icon.png` + `Resources/AppIcon.icns`). Requires `/Applications/Icon Composer.app`.
 > 应用图标：用新版 **Icon Composer**（macOS 26+ / Xcode 26）制作，源文件为 `icons/icon.icon`（`icon.json` 清单 + 分层 `Assets/*.svg`）。该格式是**满幅**的——macOS 会在 Dock/Launchpad 自动套上自家的 squircle mask（连续曲线，不是普通圆角，且随系统版本不同），所以**不要**在素材里自己烘焙圆角或边距。在 Icon Composer 里改完用 `./tools/build-icon.sh` 重新生成（内部调用自带的 `ictool` CLI）。需要装有 `/Applications/Icon Composer.app`。
@@ -149,8 +149,8 @@ Every runtime setting touches the same places — keep them in sync:
 
 ## How it works / 工作原理
 
-- **Single persistent `NSPanel`** — borderless, non-activating, `level = .floating`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]`, `ignoresMouseEvents = true`. Because it is a `fullScreenAuxiliary` panel, macOS carries it **into every fullscreen app's Space automatically** — no window switching or detection needed.
-  **单一常驻 `NSPanel`**——无边框、非激活、`level = .floating`、`collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]`、`ignoresMouseEvents = true`。因为是 `fullScreenAuxiliary` 面板，macOS 会**自动把它带进每个全屏应用的 Space**——无需切换窗口或检测。
+- **Persistent per-screen `NSPanel`s** — each attached display gets a borderless, non-activating overlay panel with `level = .floating`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]`, and `ignoresMouseEvents = true`. Per-screen panels avoid macOS/Spaces edge cases where one giant transparent window does not render on every display.
+  **每屏常驻 `NSPanel`**——每个已连接显示器都有一个无边框、非激活覆盖层，`level = .floating`、`collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]`、`ignoresMouseEvents = true`。每屏独立面板可避开 macOS/Spaces 下单个超大透明窗口无法在所有显示器渲染的边缘情况。
 - **Manual vsync-synced render loop** — the MTKView's internal display link randomly stalls after Space/fullscreen transitions (the effect appeared "sometimes dead"), so we keep `isPaused = true` and drive `MTKView.draw()` ourselves via a `CADisplayLink` (vsync-synced, macOS 14+; `Timer` fallback on 13). The trail samples the live mouse position every frame, so it stays smooth even when the OS coalesces mouse-moved events. An App Nap activity (`beginActivity(.userInitiated)`) keeps the background app's driver alive, and a watchdog rebuilds the driver if it stalls.
   **手动 vsync 同步渲染循环**——MTKView 内部 display link 在 Space/全屏切换后会随机停滞（表现为特效"时有时无"），所以我们保持 `isPaused = true`，用自建 `CADisplayLink`（vsync 同步，macOS 14+；macOS 13 用 `Timer` 回退）驱动 `MTKView.draw()`。尾迹每帧直接采样鼠标实时位置，即使系统合并了 mouse-moved 事件也保持顺滑。`beginActivity(.userInitiated)` 防止 App Nap 节流后台应用，看门狗会在驱动停滞时重建它。
 - **Idle power saving** — the render loop stops itself as soon as nothing is on screen; clicks / mouse moves / the click-loop wake it. With `showInFullscreen=false`, the overlay hides and rendering fully stops over fullscreen apps.

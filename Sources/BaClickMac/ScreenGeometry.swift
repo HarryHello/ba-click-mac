@@ -2,31 +2,18 @@ import AppKit
 import simd
 
 /// Shared screen geometry: converts global mouse coordinates (bottom-left
-/// origin) to the overlay's local coordinates. The frame is refreshed on
-/// demand (and on display changes) so resolution/layout changes never leave
-/// stale offsets — used by both the mouse monitor and the render tick.
+/// origin) to an overlay window's local coordinates. Each physical display gets
+/// its own overlay window because macOS does not reliably show one giant
+/// transparent window across every screen/Space configuration.
 final class ScreenGeometry {
     static let shared = ScreenGeometry()
 
-    private(set) var screenFrame: NSRect
+    private init() {}
 
-    private init() {
-        screenFrame = Self.currentMainFrame()
-    }
-
-    /// Re-read the main screen frame (call on didChangeScreenParameters).
-    func refresh() {
-        screenFrame = Self.currentMainFrame()
-    }
-
-    func convert(_ point: NSPoint) -> SIMD2<Float> {
+    func convert(_ point: NSPoint, in frame: NSRect) -> SIMD2<Float> {
         SIMD2(
-            Float(point.x - screenFrame.origin.x),
-            Float(point.y - screenFrame.origin.y)
+            Float(point.x - frame.origin.x),
+            Float(point.y - frame.origin.y)
         )
-    }
-
-    static func currentMainFrame() -> NSRect {
-        NSScreen.main?.frame ?? .zero
     }
 }
