@@ -133,8 +133,10 @@ case "$MODE" in
         $FRAMEWORKS
       write_info_plist "$APP"
       echo "✍️  Signing $ARCH app..."
-      codesign "${SIGN_ARGS[@]}" --force --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/BaClickMac"
-      codesign "${SIGN_ARGS[@]}" --force --sign "$SIGN_IDENTITY" "$APP"
+      # ${arr[@]+…} keeps bash 3.2 happy: an empty SIGN_ARGS expands to
+      # nothing instead of tripping "unbound variable" under set -u.
+      codesign ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} --force --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/BaClickMac"
+      codesign ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} --force --sign "$SIGN_IDENTITY" "$APP"
       codesign --verify --strict --verbose=2 "$APP" >/dev/null
       DMGSTAGE="$RELEASE/dmg-$ARCH"
       mkdir -p "$DMGSTAGE"

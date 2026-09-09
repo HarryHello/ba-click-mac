@@ -14,6 +14,7 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 ### 工程 / Engineering
 - `AppInfo.swift` 集中管理版本号与 GitHub 链接；`UpdateManager.swift` 实现检查 / 下载 / 自动更新（更新日志写入 `~/Library/Logs/BA Click/update.log`）。
 - 新增设置项测试与版本比较单元测试。
+- 修复 `build.sh --release` 在未设置 `BA_CLICK_P12` 时空签名参数数组触发 bash 3.2 `set -u` 报错（`SIGN_ARGS[@]: unbound variable`），发布管线恢复可用。
 
 ---
 
