@@ -133,7 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-    /// This overlay is never the frontmost app, so App Nap would throttle
+        // This overlay is never the frontmost app, so App Nap would throttle
         // its timers/rendering randomly. Assert an activity so clicks are
         // always processed and frames always drawn.
         activityToken = ProcessInfo.processInfo.beginActivity(
