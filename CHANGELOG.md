@@ -4,7 +4,7 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 
 ---
 
-## [Unreleased]
+## [0.2.2] - 2026-09-09
 
 ### Fixed / 修复
 - **版本比较支持预发布后缀**：`normalizeVersion` 此前把 `0.2.2-beta1` 的最后一段整体丢弃，导致测试版被解析成 `0.2` 而误报"发现新版本"。现在按 semver 语义比较：`0.2.2-beta1 > 0.2.1`（核心版本更新）但 `0.2.2-beta1 < 0.2.2`（预发布低于对应正式版）。
