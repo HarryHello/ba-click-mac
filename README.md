@@ -1,8 +1,8 @@
 # ba-click-mac
 
-> A native macOS version of the **Blue Archive click effect + cursor trail**, written in **Swift + Metal**.
+> A native macOS version of the **Blue Archive click effect + cursor trail**, written in **Swift + Metal**, based on the [ba-click-fx](https://github.com/CialloKing/ba-click-fx) web effect.
 >
-> **碧蓝档案点击特效 + 鼠标光迹** 的原生 macOS 版本，使用 **Swift + Metal** 实现。
+> **碧蓝档案点击特效 + 鼠标光迹** 的原生 macOS 版本，使用 **Swift + Metal** 实现，特效来源于 [ba-click-fx](https://github.com/CialloKing/ba-click-fx) 网页版。
 
 It creates transparent, borderless, **click-through** overlays covering all attached screens. Global mouse events are observed with AppKit's global event monitor and routed to the overlay for the display under the cursor; Metal renders particles/trail with the **original game textures** (`Circle_01` / `Ring3` / `Triangle_02_1` / `Trail_03`) extracted from `ba-click-fx`, plus a ported **MXFinalBloom** glow.
 
