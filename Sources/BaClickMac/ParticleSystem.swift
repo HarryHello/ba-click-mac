@@ -46,6 +46,9 @@ final class ParticleSystem {
     private var lastTime: Double = 0
     private var lastTrailPoint: SIMD2<Float> = .zero
     private var lastPointerPosition: SIMD2<Float>?
+    /// When `lastPointerPosition` was fed; anchors older than
+    /// `trailAnchorTimeout` are stale and must not spawn shards.
+    private var lastPointerTime: Double?
     private var trailDistanceSinceShard: Float = 0
 
     func setViewportHeight(_ height: CGFloat) {
@@ -56,10 +59,19 @@ final class ParticleSystem {
         pendingClicks.append(position)
     }
 
+    /// Trail anchors older than this are stale: with per-display routing the
+    /// cursor was being fed to ANOTHER display (or the loop was idle-stopped),
+    /// so the delta from such an anchor spans the whole absence and would
+    /// spawn a full garbage shard line (up to maxCount) in a single tick.
+    /// Matches the trail lifetime — a real segment is never this gapped.
+    static let trailAnchorTimeout: Double = 0.3
+
     func addTrailPoint(at position: SIMD2<Float>) {
         let now = CACurrentMediaTime()
 
-        if let previous = lastPointerPosition {
+        if let previous = lastPointerPosition,
+           let anchorTime = lastPointerTime,
+           now - anchorTime <= Self.trailAnchorTimeout {
             let delta = position - previous
             let length = simd_length(delta)
             if length > 0 {
@@ -67,6 +79,7 @@ final class ParticleSystem {
             }
         }
         lastPointerPosition = position
+        lastPointerTime = now
 
         let minDistance = BAEffect.trail.minVertexDistance * scale
         if trail.isEmpty || simd_distance(lastTrailPoint, position) >= minDistance {

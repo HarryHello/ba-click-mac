@@ -92,6 +92,21 @@ func testParticleSystem() {
     expect(!ps3.hasActiveParticles(), "inactive after clear")
 }
 
+// MARK: - Trail anchor staleness (cross-display shard storm)
+
+func testTrailAnchorStale() {
+    let ps = ParticleSystem()
+    ps.setViewportHeight(1080)
+    ps.addTrailPoint(at: SIMD2(100, 100))
+    // Simulate the cursor being fed to another display for a while.
+    Thread.sleep(forTimeInterval: ParticleSystem.trailAnchorTimeout + 0.05)
+    ps.addTrailPoint(at: SIMD2(1500, 900))
+    expect(ps.shards.isEmpty, "stale anchor: no shard storm after a long gap")
+    // A fresh, recent segment still spawns shards as before.
+    ps.addTrailPoint(at: SIMD2(700, 900))
+    expect(!ps.shards.isEmpty, "fresh segment still spawns trail shards")
+}
+
 // MARK: - SettingsStore
 
 func testSettingsStore() {
@@ -398,6 +413,7 @@ func testFXSettings() {
 
 testBAEval()
 testParticleSystem()
+testTrailAnchorStale()
 testFXSettings()
 testL10n()
 testSettingsStore()
