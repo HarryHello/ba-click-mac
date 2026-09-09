@@ -4,12 +4,17 @@ import SwiftUI
 /// Management panel (Apple native controls) opened from the menu bar icon.
 struct SettingsPanelView: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject var updates: UpdateManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle(L10n.t("enableEffects"), isOn: store.binding(\.enabled))
                 .toggleStyle(.switch)
                 .controlSize(.small)
+            Toggle(L10n.t("powerConnectedOnly"), isOn: store.binding(\.powerConnectedOnly))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help(L10n.t("powerConnectedOnlyHelp"))
             Toggle(L10n.t("launchAtLogin"), isOn: $store.launchAtLogin)
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -17,6 +22,12 @@ struct SettingsPanelView: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .help(L10n.t("trailHelp"))
+            Toggle(L10n.t("rightClickEffect"), isOn: store.binding(\.rightClickEnabled))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            Toggle(L10n.t("middleClickEffect"), isOn: store.binding(\.middleClickEnabled))
+                .toggleStyle(.switch)
+                .controlSize(.small)
 
             Divider()
 
@@ -44,6 +55,39 @@ struct SettingsPanelView: View {
 
             Divider()
 
+            Toggle(L10n.t("autoUpdateCheck"), isOn: store.binding(\.autoUpdateCheck))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help(L10n.t("autoUpdateCheckHelp"))
+
+            // Update check + GitHub repo on one row, each expanding to fill
+            // the full width. On macOS the button bezel only stretches when the
+            // LABEL (not the button) expands, so maxWidth goes on the Text.
+            HStack(spacing: 8) {
+                Button(action: { updates.checkForUpdates() }) {
+                    Text(L10n.t("checkForUpdates")).frame(maxWidth: .infinity)
+                }
+                .disabled(updateBusy)
+                Button(action: { updates.openRepository() }) {
+                    Text(L10n.t("openGitHub")).frame(maxWidth: .infinity)
+                }
+            }
+            HStack {
+                statusText
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                if updates.state == .updateAvailable {
+                    Button(L10n.t("updateNow")) { updates.installUpdate() }
+                        .controlSize(.small)
+                }
+            }
+            .frame(height: 22)
+
+            Divider()
+
             HStack {
                 Spacer()
                 Button(L10n.t("quit")) { NSApp.terminate(nil) }
@@ -53,6 +97,39 @@ struct SettingsPanelView: View {
         .padding(.bottom, 16)
         .padding(.top, 30) // clear the native traffic lights (fullSizeContentView)
         .frame(width: 360)
+    }
+
+    private var updateBusy: Bool {
+        switch updates.state {
+        case .checking, .downloading, .installing:
+            return true
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        switch updates.state {
+        case .idle:
+            // Always show the running version when there's nothing to report.
+            Text("v\(AppInfo.version)")
+        case .checking:
+            Text(L10n.t("checkingUpdates"))
+        case .upToDate:
+            Text(L10n.upToDateLabel(
+                latestVersion: updates.latestVersion,
+                currentVersion: AppInfo.version
+            ))
+        case .updateAvailable:
+            Text("\(L10n.t("updateAvailable")) v\(updates.latestVersion ?? "")")
+        case .downloading:
+            Text("\(L10n.t("downloadingUpdate")) \(Int(updates.downloadProgress * 100))%")
+        case .installing:
+            Text(L10n.t("installingUpdate"))
+        case .failed(let message):
+            Text(message)
+        }
     }
 
     private func slider(_ title: String, value: Binding<Float>, range: ClosedRange<Float>) -> some View {
@@ -80,14 +157,16 @@ final class SettingsPanelController: NSObject {
     private static let minPanelWidth: CGFloat = 360
 
     private let store: SettingsStore
+    private let updates: UpdateManager
     private var panel: NSPanel?
     private let cornerRadius: CGFloat = 14
 
-    init(store: SettingsStore) {
+    init(store: SettingsStore, updateManager: UpdateManager) {
         self.store = store
+        self.updates = updateManager
         super.init()
 
-        let hosting = NSHostingView(rootView: SettingsPanelView(store: store))
+        let hosting = NSHostingView(rootView: SettingsPanelView(store: store, updates: updateManager))
         let contentFitting = hosting.fittingSize
         let size = NSSize(
             width: max(Self.minPanelWidth, contentFitting.width),
@@ -187,6 +266,10 @@ final class SettingsPanelController: NSObject {
             ))
         }
         panel.makeKeyAndOrderFront(nil)
+        // Auto update check on open (throttled + silent inside UpdateManager).
+        if store.model.autoUpdateCheck {
+            updates.autoCheckIfDue()
+        }
     }
 
     func close() {

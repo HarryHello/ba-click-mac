@@ -5,6 +5,10 @@ import CoreGraphics
 import simd
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// One transparent overlay per attached display: window + renderer + the
+    /// display frame its coordinates are local to. macOS does not reliably
+    /// show one giant transparent window across every screen/Space
+    /// configuration, so each display carries its own.
     private final class Overlay {
         let window: NSWindow
         let view: TransparentMTKView
@@ -20,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var overlays: [Overlay] = []
+    // Primary overlay (overlays[0]) — the display link's view, the HUD's
+    // superview and the settings/debug surface.
     private var window: NSWindow?
     private var overlayView: TransparentMTKView?
     private var mouseMonitor: MouseMonitor?
@@ -30,10 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickLoopTimer: Timer?
     /// Menu bar (status) item so the overlay can be quit without the Dock.
     private var statusItem: NSStatusItem?
-    /// Manual render loop driver: CADisplayLink (vsync-synced, macOS 14+) or a
-    /// fallback Timer. We call MTKView.draw() ourselves so rendering never
-    /// depends on the MTKView's own (fragile) display-link lifecycle.
-    private var renderTimer: Timer?
+    /// Manual render loop driver: a vsync-synced CADisplayLink. We call
+    /// MTKView.draw() ourselves so rendering never depends on the MTKView's
+    /// own (fragile) display-link lifecycle.
     private var renderDisplayLink: CADisplayLink?
     /// Prevents App Nap from throttling the render timer while we are a
     /// non-activating background overlay.
@@ -45,6 +50,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Single source of truth for settings (management panel + renderer).
     let store = SettingsStore()
+    /// GitHub update check + self-update (wired into the panel).
+    let updateManager = UpdateManager()
+    /// Battery saver: tracks AC/battery so effects can pause on battery.
+    private let powerMonitor = PowerMonitor()
+    /// Last known AC-power state (updated by `powerMonitor`).
+    private var onACPower = PowerMonitor.isOnACPower
     private var settingsPanel: SettingsPanelController?
     /// Current render timer interval; follows the effect refresh rate.
     private var currentRenderInterval: TimeInterval = 1.0 / 60.0
@@ -77,14 +88,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Management panel + live settings wiring: every panel change applies
         // to the renderer immediately and (if the render timer is running)
         // restarts it at the new refresh rate.
-        settingsPanel = SettingsPanelController(store: store)
+        settingsPanel = SettingsPanelController(store: store, updateManager: updateManager)
         currentRenderInterval = 1.0 / Double(max(1, store.model.refreshRate))
         store.onChange = { [weak self] in
             guard let self else { return }
-            self.applySettingsToRenderers()
-            self.syncRenderTimer()
-            if !self.store.model.enabled {
-                self.overlays.forEach { $0.renderer.particleSystem.clear() }
+            self.applyCurrentSettings()
+        }
+
+        // Battery saver: re-evaluate effects whenever AC/battery state changes.
+        powerMonitor.onPowerStateChanged = { [weak self] in
+            guard let self else { return }
+            self.onACPower = PowerMonitor.isOnACPower
+            self.applyCurrentSettings()
+        }
+        powerMonitor.start()
+
+        // Auto update check shortly after launch (opt-out; throttled + silent).
+        if store.model.autoUpdateCheck {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                self?.updateManager.autoCheckIfDue()
             }
         }
 
@@ -104,8 +126,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let recover: (Notification) -> Void = { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
-                // Display layout may have changed: re-read the virtual desktop
-                // frame and resize the overlay to cover every attached screen.
+                // Display layout may have changed: realign one overlay with
+                // every attached display.
                 self.updateOverlayGeometry()
                 // Don't fight the intentional hide used for fullscreen apps.
                 guard !self.fullscreenHidden else { return }
@@ -179,20 +201,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dense even when events are coalesced. The click still feeds directly.
         let monitor = MouseMonitor()
         monitor.onMouseDown = { [weak self] point in
-            guard let self, self.store.model.enabled else { return }
+            guard let self, self.effectsAllowed else { return }
             self.startRenderTimer() // wake the idle-stopped render loop
-            if let routed = self.overlay(containing: point) {
-                routed.overlay.renderer.particleSystem.addClick(at: routed.localPoint)
-            }
+            self.addClick(at: point)
+        }
+        monitor.onRightMouseDown = { [weak self] point in
+            guard let self, self.effectsAllowed, self.store.model.rightClickEnabled else { return }
+            self.startRenderTimer()
+            self.addClick(at: point)
+        }
+        monitor.onMiddleMouseDown = { [weak self] point in
+            guard let self, self.effectsAllowed, self.store.model.middleClickEnabled else { return }
+            self.startRenderTimer()
+            self.addClick(at: point)
         }
         monitor.onMouseDrag = { [weak self] _ in
-            guard let self, self.store.model.enabled else { return }
+            guard let self, self.effectsAllowed else { return }
             self.startRenderTimer()
         }
         monitor.onMouseMove = { [weak self] _ in
             // Trail follows a free move only when "always visible" is on;
             // dragging (left button held) always wakes it.
-            guard let self, self.store.model.enabled, self.store.model.trailAlwaysVisible else { return }
+            guard let self, self.effectsAllowed, self.store.model.trailAlwaysVisible else { return }
             self.startRenderTimer()
         }
         monitor.start()
@@ -203,13 +233,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // isolation without the cursor trail.
         if getenv("BA_CLICK_LOOP") != nil {
             let loop = Timer(timeInterval: 0.9, repeats: true) { [weak self] _ in
-                guard let self, self.store.model.enabled else { return }
+                guard let self, self.effectsAllowed else { return }
                 guard let screenFrame = NSScreen.main?.frame ?? NSScreen.screens.first?.frame else { return }
-                let centerPoint = NSPoint(x: screenFrame.midX, y: screenFrame.midY)
                 self.startRenderTimer()
-                if let routed = self.overlay(containing: centerPoint) {
-                    routed.overlay.renderer.particleSystem.addClick(at: routed.localPoint)
-                }
+                self.addClick(at: NSPoint(x: screenFrame.midX, y: screenFrame.midY))
             }
             RunLoop.main.add(loop, forMode: .common)
             clickLoopTimer = loop
@@ -248,6 +275,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
+        // fullScreenAuxiliary: macOS carries the panel INTO the fullscreen
+        // app's Space automatically — no detection/switch needed.
+        // .stationary and .ignoresCycle keep the normal-desktop behavior
+        // as close to the original overlay as possible.
         panel.collectionBehavior = [
             .canJoinAllSpaces,
             .fullScreenAuxiliary,
@@ -264,6 +295,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         view.framebufferOnly = true
         view.colorPixelFormat = .bgra8Unorm
         view.preferredFramesPerSecond = 60
+        // Manual render loop: pause the MTKView's internal display link and
+        // drive draw() ourselves (see startRenderTimer). The MTKView link
+        // stalls randomly after Space/fullscreen transitions; a self-driven
+        // loop keeps rendering deterministic.
         view.isPaused = true
         view.enableSetNeedsDisplay = false
 
@@ -277,31 +312,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlays.forEach { $0.renderer.applySettings(store.model) }
     }
 
+    /// Feed a click (global point) to the overlay that owns that display.
+    private func addClick(at globalPoint: NSPoint) {
+        guard let routed = overlay(containing: globalPoint) else { return }
+        routed.overlay.renderer.particleSystem.addClick(at: routed.localPoint)
+    }
+
+    /// Route a global point to the overlay whose display contains it (the
+    /// nearest display when the point falls into a gap between frames).
     private func overlay(containing point: NSPoint) -> (overlay: Overlay, localPoint: SIMD2<Float>)? {
-        let geometry = ScreenGeometry.shared
-        if let overlay = overlays.first(where: { Self.contains(point, in: $0.screenFrame) }) {
-            return (overlay, geometry.convert(point, in: overlay.screenFrame))
-        }
-        guard let nearest = overlays.min(by: {
-            Self.distanceSquared(from: point, to: $0.screenFrame) <
-                Self.distanceSquared(from: point, to: $1.screenFrame)
-        }) else { return nil }
-        return (nearest, geometry.convert(point, in: nearest.screenFrame))
-    }
-
-    private static func contains(_ point: NSPoint, in frame: NSRect) -> Bool {
-        point.x >= frame.minX &&
-            point.x <= frame.maxX &&
-            point.y >= frame.minY &&
-            point.y <= frame.maxY
-    }
-
-    private static func distanceSquared(from point: NSPoint, to frame: NSRect) -> CGFloat {
-        let clampedX = min(max(point.x, frame.minX), frame.maxX)
-        let clampedY = min(max(point.y, frame.minY), frame.maxY)
-        let dx = point.x - clampedX
-        let dy = point.y - clampedY
-        return dx * dx + dy * dy
+        let frames = overlays.map(\.screenFrame)
+        guard let index = ScreenGeometry.frameIndex(for: point, in: frames) else { return nil }
+        let overlay = overlays[index]
+        return (overlay, ScreenGeometry.shared.convert(point, in: overlay.screenFrame))
     }
 
     /// Re-assert the CAMetalLayer transparency. The layer can reset its
@@ -318,7 +341,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Keep one transparent overlay aligned with each attached display.
+    /// Keep one transparent overlay aligned with each attached display:
+    /// resize in place when frames merely changed, rebuild when displays were
+    /// added/removed.
     private func updateOverlayGeometry() {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return }
@@ -326,7 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let needsRebuild = frames.count != overlays.count ||
             zip(frames, overlays.map(\.screenFrame)).contains { !$0.equalTo($1) }
 
-        if needsRebuild, let device = overlayView?.device ?? MTLCreateSystemDefaultDevice() {
+        if needsRebuild, let device = overlays.first?.view.device ?? MTLCreateSystemDefaultDevice() {
             let label = statusLabel
             overlays.forEach { $0.window.orderOut(nil) }
             overlays = screens.compactMap { makeOverlay(device: device, screen: $0) }
@@ -368,7 +393,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if fullscreenHidden { return }
         // If we intentionally stopped rendering while idle (see
         // startRenderTimer), that's not a stall either.
-        guard renderTimer != nil || renderDisplayLink != nil else { return }
+        guard renderDisplayLink != nil else { return }
         let now = CACurrentMediaTime()
         let stalled = overlays.contains { overlay in
             overlay.renderer.lastDrawTime == 0 || now - overlay.renderer.lastDrawTime > Self.stallThreshold
@@ -386,40 +411,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Effects availability: the master switch AND, when the battery-saver
+    /// toggle is on, AC power (desktops without a battery always count as AC).
+    private var effectsAllowed: Bool {
+        store.model.enabled && (!store.model.powerConnectedOnly || onACPower)
+    }
+
+    /// Apply the current settings and refresh the render loop. Called on any
+    /// settings change and on power-state changes (battery saver).
+    private func applyCurrentSettings() {
+        applySettingsToRenderers()
+        syncRenderTimer()
+        if !effectsAllowed {
+            overlays.forEach { $0.renderer.particleSystem.clear() }
+        }
+    }
+
     /// Start the manual render loop at the configured refresh rate
-    /// (idempotent). Uses a vsync-synced CADisplayLink on macOS 14+ (smooth,
-    /// no frame-phase jitter), falling back to a Timer on macOS 13. The MTKView
-    /// keeps its own display link paused; we call draw() ourselves so rendering
-    /// never depends on the MTKView's fragile display-link lifecycle.
+    /// (idempotent). Uses a vsync-synced CADisplayLink (smooth, no
+    /// frame-phase jitter). The MTKView keeps its own display link paused;
+    /// we call draw() ourselves so rendering never depends on the MTKView's
+    /// fragile display-link lifecycle.
     ///
     /// Power saving: the loop stops itself as soon as nothing is on screen
     /// (idle -> zero GPU work). Clicks / mouse moves / the click-loop wake it
     /// up again.
     private func startRenderTimer() {
-        guard renderTimer == nil, renderDisplayLink == nil, let overlayView else { return }
+        guard renderDisplayLink == nil, let overlayView = overlays.first?.view else { return }
         overlays.forEach { $0.view.isPaused = true }
-        if #available(macOS 14.0, *) {
-            let link = overlayView.displayLink(target: self, selector: #selector(renderTick))
-            link.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
-            link.add(to: .main, forMode: .common)
-            renderDisplayLink = link
-        } else {
-            let timer = Timer(timeInterval: currentRenderInterval, repeats: true) { [weak self] _ in
-                self?.renderTick()
-            }
-            RunLoop.main.add(timer, forMode: .common)
-            renderTimer = timer
-        }
+        let link = overlayView.displayLink(target: self, selector: #selector(renderTick))
+        link.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
+        link.add(to: .main, forMode: .common)
+        renderDisplayLink = link
     }
 
     private func stopRenderTimer() {
-        renderTimer?.invalidate()
-        renderTimer = nil
         renderDisplayLink?.invalidate()
         renderDisplayLink = nil
     }
 
-    @available(macOS 14.0, *)
     private func frameRateRange(for rate: Int) -> CAFrameRateRange {
         CAFrameRateRange(minimum: 24, maximum: 240, preferred: Float(max(1, rate)))
     }
@@ -431,9 +461,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// events while the main thread is busy rendering.
     @objc private func renderTick() {
         guard !overlays.isEmpty else { return }
-        if store.model.enabled {
-            let dragging = (NSEvent.pressedMouseButtons & 1) != 0
+        if effectsAllowed {
+            // Bit 0 = left, bit 1 = right, bit 2 = middle (button 3). Any held
+            // button feeds the trail so right/middle drags also draw it when
+            // "always visible" is off.
+            let dragging = (NSEvent.pressedMouseButtons & 0b111) != 0
             if store.model.trailAlwaysVisible || dragging {
+                // The trail point belongs to the display the cursor is on.
                 let point = NSEvent.mouseLocation
                 if let routed = overlay(containing: point) {
                     routed.overlay.renderer.particleSystem.addTrailPoint(at: routed.localPoint)
@@ -441,7 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         overlays.forEach { $0.view.draw() }
-        // Nothing left on screen -> stop until the next interaction.
+        // Nothing left on any screen -> stop until the next interaction.
         if !overlays.contains(where: { $0.renderer.particleSystem.hasActiveParticles() }) {
             stopRenderTimer()
         }
@@ -453,13 +487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let interval = 1.0 / Double(max(1, store.model.refreshRate))
         if abs(interval - currentRenderInterval) > 0.0001 {
             currentRenderInterval = interval
-            if #available(macOS 14.0, *) {
-                renderDisplayLink?.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
-            }
-            if renderTimer != nil {
-                stopRenderTimer()
-                startRenderTimer()
-            }
+            renderDisplayLink?.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
         }
     }
 
@@ -494,8 +522,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Best-effort detection of whether the frontmost app has a fullscreen
-    /// window covering the screen (layer 0, on-screen, screen-sized bounds).
-    /// Bounds/layer need no screen-recording permission (only names do).
+    /// window covering any attached display (layer 0, on-screen, screen-sized
+    /// bounds). Bounds/layer need no screen-recording permission (only names
+    /// do).
     private func isFullscreenAppActive() -> Bool {
         let screenFrames = NSScreen.screens.map(\.frame)
         guard !screenFrames.isEmpty else { return false }

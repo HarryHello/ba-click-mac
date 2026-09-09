@@ -17,12 +17,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION="${BA_CLICK_VERSION:-0.1.1}"
+VERSION="${BA_CLICK_VERSION:-0.2.2}"
 SIGN_IDENTITY="${BA_CLICK_SIGN_IDENTITY:-BA Click Mac Signing}"
 # macOS 14 is the floor: the primary render driver is a CADisplayLink
 # (the macOS 13 Timer fallback stays in the code but is no longer a target).
 DEPLOY_TARGET="14.0"
-FRAMEWORKS="-framework AppKit -framework Metal -framework MetalKit -framework MetalPerformanceShaders -framework CoreGraphics -framework QuartzCore"
+FRAMEWORKS="-framework AppKit -framework Metal -framework MetalKit -framework MetalPerformanceShaders -framework CoreGraphics -framework QuartzCore -framework IOKit -framework ServiceManagement"
 
 MODE="${1:-}"
 
@@ -133,8 +133,10 @@ case "$MODE" in
         $FRAMEWORKS
       write_info_plist "$APP"
       echo "✍️  Signing $ARCH app..."
-      codesign "${SIGN_ARGS[@]}" --force --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/BaClickMac"
-      codesign "${SIGN_ARGS[@]}" --force --sign "$SIGN_IDENTITY" "$APP"
+      # ${arr[@]+…} keeps bash 3.2 happy: an empty SIGN_ARGS expands to
+      # nothing instead of tripping "unbound variable" under set -u.
+      codesign ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} --force --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/BaClickMac"
+      codesign ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} --force --sign "$SIGN_IDENTITY" "$APP"
       codesign --verify --strict --verbose=2 "$APP" >/dev/null
       DMGSTAGE="$RELEASE/dmg-$ARCH"
       mkdir -p "$DMGSTAGE"

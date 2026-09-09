@@ -18,7 +18,9 @@ swiftc \
   -framework MetalKit \
   -framework MetalPerformanceShaders \
   -framework CoreGraphics \
-  -framework QuartzCore
+  -framework QuartzCore \
+  -framework IOKit \
+  -framework ServiceManagement
 
 # Isolate from the user's real ~/.ba-click-mac-settings.json: FXSettings.load()
 # walks candidate URLs beyond the cwd file (cwd -> exe dir -> $HOME), so the
