@@ -4,7 +4,7 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 
 ---
 
-## [Unreleased]
+## [0.3.0] - 2026-09-10
 
 ### 优化 / Performance
 - **渲染帧只绘制有活动粒子的显示器**：多显示器下每帧原来对所有屏幕跑完整的场景+bloom 管线，现在空屏幕整条管线跳过——双屏日常使用 GPU 开销约减半，视觉零差异。
