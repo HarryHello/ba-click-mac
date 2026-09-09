@@ -205,6 +205,19 @@ func testUpdateHelperScript() {
     expect(script.contains("SELF=\"$7\""), "helper: reads self-path argument")
 }
 
+// MARK: - Up-to-date label formatting (pure)
+
+func testUpToDateLabel() {
+    let label = L10n.upToDateLabel(latestVersion: "0.2.0", currentVersion: "0.2.1")
+    expect(label.contains("v0.2.0"), "up-to-date label contains the latest version")
+    expect(!label.contains("vv"), "up-to-date label has exactly one 'v' prefix")
+    // Falls back to the running version when the API returned none.
+    expect(
+        L10n.upToDateLabel(latestVersion: nil, currentVersion: "9.9.9").contains("v9.9.9"),
+        "up-to-date label falls back to the running version"
+    )
+}
+
 // MARK: - Automatic update check throttling (pure)
 
 func testAutoCheckThrottle() {
@@ -342,6 +355,7 @@ testL10n()
 testSettingsStore()
 testVersionCompare()
 testProxyURLs()
+testUpToDateLabel()
 testAutoCheckThrottle()
 testUpdateHelperScript()
 testUpdateCheckLive()

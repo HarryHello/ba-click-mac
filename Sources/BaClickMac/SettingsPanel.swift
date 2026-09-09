@@ -117,10 +117,9 @@ struct SettingsPanelView: View {
         case .checking:
             Text(L10n.t("checkingUpdates"))
         case .upToDate:
-            // "upToDate" is a format string ("v%@ 已是最新版本").
-            Text(L10n.t("upToDate").replacingOccurrences(
-                of: "%@",
-                with: "v\(updates.latestVersion ?? AppInfo.version)"
+            Text(L10n.upToDateLabel(
+                latestVersion: updates.latestVersion,
+                currentVersion: AppInfo.version
             ))
         case .updateAvailable:
             Text("\(L10n.t("updateAvailable")) v\(updates.latestVersion ?? "")")

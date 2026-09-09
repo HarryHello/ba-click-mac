@@ -49,7 +49,7 @@ enum L10n {
         "checkForUpdates": ("检查更新", "Check for Updates"),
         "openGitHub": ("GitHub 仓库", "GitHub Repo"),
         "checkingUpdates": ("正在检查更新…", "Checking for updates…"),
-        "upToDate": ("v%@ 已是最新版本", "v%@ — You're up to date"),
+        "upToDate": ("%@ 已是最新版本", "%@ — You're up to date"),
         "updateAvailable": ("发现新版本", "Update available"),
         "autoUpdateCheck": ("自动检测更新", "Check for Updates Automatically"),
         "autoUpdateCheckHelp": (
@@ -69,5 +69,15 @@ enum L10n {
     static func t(_ key: String) -> String {
         guard let pair = strings[key] else { return key }
         return isChinese ? pair.zh : pair.en
+    }
+
+    /// "v0.2.0 已是最新版本" — the "upToDate" entry is a "%@" template; the
+    /// version (with its single "v" prefix) is substituted here so the prefix
+    /// lives in exactly one place.
+    static func upToDateLabel(latestVersion: String?, currentVersion: String) -> String {
+        t("upToDate").replacingOccurrences(
+            of: "%@",
+            with: "v\(latestVersion ?? currentVersion)"
+        )
     }
 }
