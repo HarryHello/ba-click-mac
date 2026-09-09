@@ -34,8 +34,8 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 - ✅ Original game textures + Unity particle curves / 原始游戏贴图 + Unity 粒子曲线
 - ✅ Multi-pass MXFinalBloom (HDR scene → pyramid → additive glow) / 多级 MXFinalBloom 辉光（HDR 场景 → 金字塔 → 叠加辉光）
 - ✅ Works over fullscreen apps (persistent per-screen NSPanels) / 全屏应用之上正常显示（每屏常驻 NSPanel）
-- ✅ Manual 60 fps render loop (display-link stalls fixed) / 手动 60fps 渲染循环（修复 display link 停滞）
-- ✅ Idle power saving (render stops when nothing is on screen) / 闲置省电（无内容时停止渲染）
+- ✅ Manual vsync render loop, 24–240 fps (display-link stalls fixed) / 手动垂直同步渲染循环，24–240fps（修复 display link 停滞）
+- ✅ Idle power saving (render stops when nothing is on screen; displays without active content skip their whole pipeline) / 闲置省电（无内容时停止渲染；无活动粒子的显示器整条渲染管线跳过）
 - ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`) / 单元测试 + CI
 - ✅ Menu bar icon + management panel (no Dock icon) / 菜单栏图标 + 管理面板（无 Dock 图标）
 - ✅ Right-click + middle-click effects (independently toggleable) / 右键 + 中键点击效果（可独立开关）
@@ -187,14 +187,17 @@ Every runtime setting touches the same places — keep them in sync:
 ```
 Sources/BaClickMac/
   main.swift                 App entry, NSApplication + delegate
-  AppDelegate.swift          NSPanel setup, 60 fps render loop, mouse monitor,
-                             fullscreen handling, watchdog, HUD
+  AppDelegate.swift          Per-display NSPanel overlays, vsync render loop,
+                             mouse-event routing, fullscreen handling, watchdog, HUD
   TransparentMTKView.swift   Non-opaque MTKView
-  MouseMonitor.swift         Global mouse event observation
+  MouseMonitor.swift         Global mouse event observation (raw global points)
+  ScreenGeometry.swift       Global→overlay coordinate conversion + display routing
   ParticleSystem.swift       Click particles + trail simulation
   Renderer.swift             Metal pipelines, geometry building, bloom pyramid
   Shaders.swift              Metal Shader Language source (runtime compiled)
   FXSettings.swift           settings.json loading / defaults (lenient decode)
+  PowerMonitor.swift         AC/battery detection + power-state notifications
+  SingleInstance.swift       flock-based single-instance guard
   BAEffectData.swift         Unity keyframes / game-derived values
   DebugLog.swift             stderr logging + bail() helper
   ResourceLocator.swift      Shared bundled-resource lookup
