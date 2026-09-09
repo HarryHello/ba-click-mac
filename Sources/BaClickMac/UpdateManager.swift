@@ -70,9 +70,7 @@ final class UpdateManager: ObservableObject {
                 }
                 self.latestRelease = object
                 self.latestVersion = UpdateManager.versionString(tag)
-                let latest = UpdateManager.normalizeVersion(tag)
-                let current = UpdateManager.normalizeVersion(AppInfo.version)
-                self.state = UpdateManager.compare(current, latest) < 0 ? .updateAvailable : .upToDate
+                self.state = UpdateManager.compare(AppInfo.version, tag) < 0 ? .updateAvailable : .upToDate
             }
         }
     }
@@ -428,13 +426,26 @@ final class UpdateManager: ObservableObject {
         return trimmed
     }
 
-    /// "v1.2.3" / "1.2.3" -> [1, 2, 3] (numeric components only).
-    static func normalizeVersion(_ string: String) -> [Int] {
+    /// "v1.2.3-beta1" -> (core: [1,2,3], prerelease: "beta1").
+    /// The pre-release suffix (after "-") is kept separate instead of being
+    /// swallowed by the numeric parse — dropping it made "0.2.2-beta1"
+    /// compare equal to "0.2" and misreport updates.
+    static func parseVersion(_ string: String) -> (core: [Int], prerelease: String?) {
         var trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if trimmed.hasPrefix("v") {
             trimmed.removeFirst()
         }
-        return trimmed.split(separator: ".").compactMap { Int($0) }
+        if let hyphen = trimmed.firstIndex(of: "-") {
+            let core = String(trimmed[..<hyphen]).split(separator: ".").compactMap { Int($0) }
+            let pre = String(trimmed[trimmed.index(after: hyphen)...])
+            return (core, pre.isEmpty ? nil : pre)
+        }
+        return (trimmed.split(separator: ".").compactMap { Int($0) }, nil)
+    }
+
+    /// "v1.2.3" / "1.2.3" -> [1, 2, 3] (numeric core, pre-release dropped).
+    static func normalizeVersion(_ string: String) -> [Int] {
+        parseVersion(string).core
     }
 
     /// -1 when a < b, 0 when equal, 1 when a > b (missing components = 0).
@@ -446,5 +457,23 @@ final class UpdateManager: ObservableObject {
             if av != bv { return av < bv ? -1 : 1 }
         }
         return 0
+    }
+
+    /// String compare with semver pre-release semantics:
+    /// `0.2.2-beta1 > 0.2.1` (newer core), but `0.2.2-beta1 < 0.2.2`
+    /// (a pre-release sorts just below its own release).
+    static func compare(_ a: String, _ b: String) -> Int {
+        let pa = parseVersion(a)
+        let pb = parseVersion(b)
+        let core = compare(pa.core, pb.core)
+        if core != 0 { return core }
+        switch (pa.prerelease, pb.prerelease) {
+        case (nil, nil): return 0
+        case (.some, nil): return -1
+        case (nil, .some): return 1
+        case (let ap?, let bp?):
+            if ap == bp { return 0 }
+            return ap < bp ? -1 : 1
+        }
     }
 }

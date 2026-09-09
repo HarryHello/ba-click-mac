@@ -7,6 +7,7 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 ## [Unreleased]
 
 ### Fixed / 修复
+- **版本比较支持预发布后缀**：`normalizeVersion` 此前把 `0.2.2-beta1` 的最后一段整体丢弃，导致测试版被解析成 `0.2` 而误报"发现新版本"。现在按 semver 语义比较：`0.2.2-beta1 > 0.2.1`（核心版本更新）但 `0.2.2-beta1 < 0.2.2`（预发布低于对应正式版）。
 - **开关"开机自启"会当场拉起第二个实例**：旧实现的 `launchctl bootstrap` 会立即运行 `RunAtLoad` 任务（第二个 BA Click 出现），关闭开关时的 `bootout` 又把它杀掉。捆绑版（正常安装）已改用 **SMAppService**——注册进 系统设置 → 通用 → 登录项，与系统里的开关状态同步，注册绝不当场启动；裸二进制（run.sh 开发用）回退的 LaunchAgent 改为"禁用 → 注册 → 启用"休眠注册，同样不会当场启动。旧版（≤0.2.1）的 LaunchAgent 注册会在下次切换开关时自动迁移/清理。
 - **新增单实例保护**（`flock` 锁，`~/.ba-click-mac.lock`）：无论重复打开 .app 还是 run.sh 与已装版并存，第二个实例立即自动退出——不再出现两层特效叠加、设置写入竞争。
 

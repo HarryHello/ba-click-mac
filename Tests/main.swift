@@ -156,6 +156,14 @@ func testVersionCompare() {
     expect(UpdateManager.compare([2, 0, 0], [1, 9, 9]) == 1, "compare: newer")
     expect(UpdateManager.compare([1, 2], [1, 2, 0]) == 0, "compare: missing components are zero")
     expect(UpdateManager.compare([1, 2], [1, 2, 1]) == -1, "compare: shorter is older")
+
+    // Pre-release suffixes (semver-ish): newer core wins, own release wins.
+    expect(UpdateManager.compare("0.2.2-beta1", "0.2.1") == 1, "compare: beta above older release")
+    expect(UpdateManager.compare("0.2.2-beta1", "0.2.2") == -1, "compare: beta below its own release")
+    expect(UpdateManager.compare("0.2.2", "0.2.2-beta1") == 1, "compare: release above its beta")
+    expect(UpdateManager.compare("1.0.0-alpha", "1.0.0-alpha") == 0, "compare: identical betas equal")
+    expect(UpdateManager.compare("v0.2.1", "0.2.2-beta1") == -1, "compare: tag with v-prefix handled")
+    expect(UpdateManager.normalizeVersion("0.2.2-beta1") == [0, 2, 2], "normalize: core keeps suffix-segment")
 }
 
 // MARK: - GitHub proxy URL construction (pure)
