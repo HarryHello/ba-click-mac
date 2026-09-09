@@ -21,7 +21,7 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 | Fullscreen | NSPanel (`fullScreenAuxiliary`) is carried into fullscreen apps' Spaces automatically — works over QQ / Chrome fullscreen video | NSPanel（`fullScreenAuxiliary`）自动进入全屏应用的 Space —— QQ / Chrome 全屏视频下均正常 |
 | Live tuning | Edit `settings.json`, hot-reloaded every 0.5 s; partial files allowed | 编辑 `settings.json`，每 0.5 秒热重载；允许只写要改的键 |
 | Power saving | Stops rendering when idle; no GPU work behind hidden fullscreen (`showInFullscreen=false`) | 闲置时停止渲染；隐藏全屏时不产生 GPU 开销（`showInFullscreen=false`） |
-| Management panel | Apple-native panel via the menu bar icon: effect on/off, launch at login, trail mode/thickness/glow, click size/brightness/opacity, refresh rate, right/middle-click toggles, update check + GitHub repo | 菜单栏图标打开的 Apple 原生管理面板：效果开关、开机自启、尾迹模式/粗细/辉光、点击大小/亮度/透明度、刷新率、右键/中键开关、检查更新 + GitHub 仓库 |
+| Management panel | Apple-native panel via the menu bar icon: effect on/off, launch at login, trail mode/thickness/glow, click size/brightness/opacity, refresh rate, right/middle-click toggles, power-saver toggle, auto update check, update status with the running version | 菜单栏图标打开的 Apple 原生管理面板：效果开关、开机自启、仅接通电源时启用、尾迹模式/粗细/辉光、点击大小/亮度/透明度、刷新率、右键/中键开关、自动检测更新、检查更新 + GitHub 仓库（状态栏常显当前版本号） |
 | i18n | Chinese/English UI, auto-detects the system language (`zh*` → 中文) | 中英双语界面，自动检测系统语言（`zh*` → 中文） |
 | No Dock icon | Runs as an `.accessory` app (menu bar only), so the Dock stays clean | `.accessory` 模式运行（仅菜单栏），Dock 干净 |
 
@@ -40,6 +40,8 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 - ✅ Menu bar icon + management panel (no Dock icon) / 菜单栏图标 + 管理面板（无 Dock 图标）
 - ✅ Right-click + middle-click effects (independently toggleable) / 右键 + 中键点击效果（可独立开关）
 - ✅ Update check + self-update (falls back to GitHub Releases) / 检查更新 + 自动更新（失败时跳转 Releases）
+- ✅ Optional auto update check (at launch + panel open, throttled & silent) / 可选的自动检测更新（启动 + 打开面板时，节流且静默）
+- ✅ Battery saver: run effects only when plugged in / 仅接通电源时启用（电池时自动暂停特效）
 - ✅ Launch at login / 开机自启
 - ⏳ Multi-monitor (currently only the main screen) / 多显示器（目前仅主屏幕）
 
@@ -54,6 +56,8 @@ It creates a transparent, borderless, **click-through** overlay covering the mai
 ## Requirements / 环境要求
 
 - macOS 13+ (built with `./build.sh`; macOS 14+ enables the vsync render driver, macOS 26+ the native liquid-glass panel)
+- The x64 (Intel) DMG only runs while macOS still ships Rosetta 2 — macOS 27 is the last major release to support Intel apps, so the x64 build is end-of-life with macOS 28. Apple Silicon users should use the arm64 DMG.
+- x64（Intel）DMG 依赖 macOS 自带的 Rosetta 2：macOS 27 是最后支持 Intel 应用的大版本，macOS 28 起 x64 构建将无法运行。Apple Silicon 用户请使用 arm64 DMG。
 - Xcode Command Line Tools or Xcode (Swift toolchain)
 - A Metal-capable Mac (any Apple Silicon, most Intel Macs)
 - 需要 Metal 支持的 Mac（Apple Silicon 或大部分 Intel Mac）
@@ -169,8 +173,10 @@ Every runtime setting touches the same places — keep them in sync:
   **尾迹模式**——开启"始终显示尾迹"：尾迹跟随任意鼠标移动；关闭：仅在按住任意鼠标键并拖动时显示尾迹（左键 / 右键 / 中键均可）。
 - **Mouse buttons / 鼠标按键** — left, right and middle clicks all spawn the click effect; right/middle are independently toggleable in the panel (`rightClickEnabled` / `middleClickEnabled`).
   **鼠标按键**——左键、右键、中键点击都会触发点击特效；右键 / 中键可在面板中独立开关（`rightClickEnabled` / `middleClickEnabled`）。
-- **Updates / 更新** — panel's **检查更新** queries the GitHub latest release API and compares versions; **立即更新** downloads the DMG for the running architecture, mounts it, replaces the app bundle via a detached helper (`~/Library/Logs/BA Click/update.log`) and relaunches. When auto-update isn't possible (raw binary / unwritable location / failure) it opens the GitHub Releases page. The **GitHub 仓库** button opens the repo home.
-  **更新**——面板**检查更新**查询 GitHub 最新 release 并与当前版本对比；**立即更新**下载对应架构 DMG → 挂载 → 通过分离助手脚本替换应用包（日志在 `~/Library/Logs/BA Click/update.log`）→ 自动重启。无法自动更新（裸二进制 / 目录不可写 / 失败）时跳转 GitHub Releases 页面；**GitHub 仓库**按钮打开仓库主页。
+- **Updates / 更新** — panel's **检查更新** queries the GitHub latest release API and compares versions; **自动检测更新** (on by default) checks once at launch (3s in) and each time the panel opens, throttled to once per 60s and silent on failure — the manual button always checks for real. The status line always shows the running version (e.g. `v0.2.1`) when idle, then `v0.2.1 已是最新版本` / `发现新版本 vX.Y.Z`. **立即更新** downloads the DMG for the running architecture, verifies it is signed with the SAME certificate as the running app (designated-requirement match — a tampered proxy-served download is refused), mounts it, atomically replaces the app bundle via a detached helper (`~/Library/Logs/BA Click/update.log`, rollback on failure) and relaunches. When auto-update isn't possible (raw binary / unwritable location / failure) it opens the GitHub Releases page. The **GitHub 仓库** button opens the repo home.
+  **更新**——面板**检查更新**查询 GitHub 最新 release 并与当前版本对比；**自动检测更新**（默认开）在启动 3 秒后和每次打开面板时各检查一次，60 秒节流、失败静默——手动点按钮则始终真实检查。状态栏空闲时常显当前版本号（如 `v0.2.1`），检查后显示 `v0.2.1 已是最新版本` / `发现新版本 vX.Y.Z`。**立即更新**下载对应架构 DMG，先校验其签名与当前应用是同一张证书（设计需求匹配，代理投递的篡改包会被拒绝）→ 挂载 → 通过分离助手脚本原子替换应用包（日志在 `~/Library/Logs/BA Click/update.log`，失败自动回滚）→ 自动重启。无法自动更新（裸二进制 / 目录不可写 / 失败）时跳转 GitHub Releases 页面；**GitHub 仓库**按钮打开仓库主页。
+- **Battery saver / 仅接通电源时启用** — when the toggle is on, all effects pause on battery power and resume the moment AC power returns (IOKit power-source notification). Desktops without a battery count as always plugged in, so the toggle is a no-op there.
+  **省电**——开关打开后，使用电池时自动暂停全部特效，插回电源立即恢复（IOKit 电源源通知）。没有电池的台式机视为始终接通电源，此开关无副作用。
 - **GitHub proxies / GitHub 代理** — when the direct connection to `api.github.com` / `github.com` is blocked or fails, the update check and the DMG download fall back to the configured proxies in order (`AppInfo.swift` → `GitHubProxy`). Verified reachable: `gh-proxy.org`, `gh-proxy.com` (API + download), `ghproxy.net`, `ghfast.top` (download only).
   **GitHub 代理**——当直连 `api.github.com` / `github.com` 被墙或失败时，检查更新与 DMG 下载会按序回退到配置的代理（`AppInfo.swift` 里的 `GitHubProxy`）。实测可用：`gh-proxy.org`、`gh-proxy.com`（API + 下载）、`ghproxy.net`、`ghfast.top`（仅下载）。
 - **Launch at login / 开机自启** — writes a user LaunchAgent plist (`~/Library/LaunchAgents/local.ba-click-mac.plist`) pointing at the current executable; toggled from the panel.
