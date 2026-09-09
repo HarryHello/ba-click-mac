@@ -126,7 +126,7 @@ The app loads `settings.json` from the **current working directory**, the **exec
 | `triangleOpacity` | `1.0` | Triangle particle opacity (higher = more opaque) / 三角粒子不透明度（越高越实） |
 | `refreshRate` | `60` | Render refresh rate (30/60/120/240) / 渲染刷新率 |
 
-> **Launch at login / 开机自启** is not persisted in `settings.json` — it's a system LaunchAgent state toggled by the panel's 开机自启 switch.
+> **Launch at login / 开机自启** is not persisted in `settings.json` — it's system state (SMAppService / LaunchAgent) toggled by the panel's 开机自启 switch.
 
 > **Lenient parsing / 宽容解析**: a `settings.json` may contain **only the keys you want to override** — missing keys keep the defaults. Unknown keys print a warning to stderr (ignored); invalid JSON prints a warning and falls back to defaults. This is intentional, so a partial edit never silently wipes your other settings.
 >
@@ -179,8 +179,8 @@ Every runtime setting touches the same places — keep them in sync:
   **省电**——开关打开后，使用电池时自动暂停全部特效，插回电源立即恢复（IOKit 电源源通知）。没有电池的台式机视为始终接通电源，此开关无副作用。
 - **GitHub proxies / GitHub 代理** — when the direct connection to `api.github.com` / `github.com` is blocked or fails, the update check and the DMG download fall back to the configured proxies in order (`AppInfo.swift` → `GitHubProxy`). Verified reachable: `gh-proxy.org`, `gh-proxy.com` (API + download), `ghproxy.net`, `ghfast.top` (download only).
   **GitHub 代理**——当直连 `api.github.com` / `github.com` 被墙或失败时，检查更新与 DMG 下载会按序回退到配置的代理（`AppInfo.swift` 里的 `GitHubProxy`）。实测可用：`gh-proxy.org`、`gh-proxy.com`（API + 下载）、`ghproxy.net`、`ghfast.top`（仅下载）。
-- **Launch at login / 开机自启** — writes a user LaunchAgent plist (`~/Library/LaunchAgents/local.ba-click-mac.plist`) pointing at the current executable; toggled from the panel.
-  **开机自启**——写入用户 LaunchAgent plist（`~/Library/LaunchAgents/local.ba-click-mac.plist`）指向当前可执行文件；由面板开关控制。
+- **Launch at login / 开机自启** — bundled apps register via `SMAppService`, so the entry shows up in System Settings → General → Login Items; registering never launches the app on the spot. The raw binary (run.sh) can't self-register there and falls back to a user LaunchAgent plist, registered dormant (disable → bootstrap → enable). Legacy plist registrations (≤0.2.1) migrate on the next toggle. A `flock` single-instance lock (`~/.ba-click-mac.lock`) makes any double-launch exit immediately.
+  **开机自启**——捆绑版通过 `SMAppService` 注册，条目出现在 系统设置 → 通用 → 登录项，注册绝不当场启动；裸二进制（run.sh）回退为用户 LaunchAgent plist，以"禁用→注册→启用"方式休眠注册。旧版（≤0.2.1）的 plist 注册在下次切换开关时自动迁移。另有 `flock` 单实例锁（`~/.ba-click-mac.lock`），双开时第二个实例立即退出。
 
 ## Project layout / 工程结构
 
