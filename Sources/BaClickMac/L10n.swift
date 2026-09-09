@@ -71,13 +71,14 @@ enum L10n {
         return isChinese ? pair.zh : pair.en
     }
 
-    /// "v0.2.0 已是最新版本" — the "upToDate" entry is a "%@" template; the
-    /// version (with its single "v" prefix) is substituted here so the prefix
-    /// lives in exactly one place.
-    static func upToDateLabel(latestVersion: String?, currentVersion: String) -> String {
+    /// "v0.2.2 已是最新版本" — the "upToDate" entry is a "%@" template; the
+    /// RUNNING version is substituted here (a beta/dev build is "up to date"
+    /// while newer than the release feed, and the label must reflect what is
+    /// actually running, not the release feed).
+    static func upToDateLabel(currentVersion: String) -> String {
         t("upToDate").replacingOccurrences(
             of: "%@",
-            with: "v\(latestVersion ?? currentVersion)"
+            with: "v\(currentVersion)"
         )
     }
 }

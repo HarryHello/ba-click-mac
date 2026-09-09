@@ -474,7 +474,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-        overlays.forEach { $0.view.draw() }
+        // Draw only overlays that still show something: the one under the
+        // cursor just received the trail point, others may still be fading
+        // out. Empty displays skip their whole scene+bloom pipeline, which
+        // halves (or better) the per-tick GPU cost on multi-display setups
+        // with no visible difference.
+        overlays.forEach { overlay in
+            if overlay.renderer.particleSystem.hasActiveParticles() {
+                overlay.view.draw()
+            }
+        }
         // Nothing left on any screen -> stop until the next interaction.
         if !overlays.contains(where: { $0.renderer.particleSystem.hasActiveParticles() }) {
             stopRenderTimer()

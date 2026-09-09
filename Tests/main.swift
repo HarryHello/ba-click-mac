@@ -259,14 +259,11 @@ func testSingleInstanceLock() {
 // MARK: - Up-to-date label formatting (pure)
 
 func testUpToDateLabel() {
-    let label = L10n.upToDateLabel(latestVersion: "0.2.0", currentVersion: "0.2.1")
-    expect(label.contains("v0.2.0"), "up-to-date label contains the latest version")
+    // The label must show the RUNNING version: a beta build (newer than the
+    // release feed) previously displayed the feed's older release number.
+    let label = L10n.upToDateLabel(currentVersion: "0.3.0-beta1")
+    expect(label.contains("v0.3.0-beta1"), "up-to-date label shows the running version")
     expect(!label.contains("vv"), "up-to-date label has exactly one 'v' prefix")
-    // Falls back to the running version when the API returned none.
-    expect(
-        L10n.upToDateLabel(latestVersion: nil, currentVersion: "9.9.9").contains("v9.9.9"),
-        "up-to-date label falls back to the running version"
-    )
 }
 
 // MARK: - Automatic update check throttling (pure)

@@ -117,10 +117,7 @@ struct SettingsPanelView: View {
         case .checking:
             Text(L10n.t("checkingUpdates"))
         case .upToDate:
-            Text(L10n.upToDateLabel(
-                latestVersion: updates.latestVersion,
-                currentVersion: AppInfo.version
-            ))
+            Text(L10n.upToDateLabel(currentVersion: AppInfo.version))
         case .updateAvailable:
             Text("\(L10n.t("updateAvailable")) v\(updates.latestVersion ?? "")")
         case .downloading:
