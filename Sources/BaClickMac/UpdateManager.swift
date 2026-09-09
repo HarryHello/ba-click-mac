@@ -30,6 +30,8 @@ final class UpdateManager: ObservableObject {
     private var progressObservation: NSKeyValueObservation?
     /// The latest-release JSON from the GitHub API (kept for the asset lookup).
     private var latestRelease: [String: Any]?
+    /// When the last check ran (also for automatic checks); used for throttling.
+    private var lastCheckDate: Date?
 
     init() {
         let config = URLSessionConfiguration.ephemeral
@@ -43,10 +45,12 @@ final class UpdateManager: ObservableObject {
     /// Query the GitHub API for the latest published release and compare it
     /// with the running version. Tries the direct API URL first, then each
     /// GitHub proxy in order when the direct connection fails (blocked
-    /// network / timeout). Never throws — failures surface as `.failed`.
-    func checkForUpdates() {
+    /// network / timeout). Never throws — failures surface as `.failed`
+    /// (or back to `.idle` when `silent`).
+    func checkForUpdates(silent: Bool = false) {
         guard state != .checking else { return }
         state = .checking
+        lastCheckDate = Date()
         latestVersion = nil
         latestRelease = nil
 
@@ -59,7 +63,9 @@ final class UpdateManager: ObservableObject {
             DispatchQueue.main.async {
                 guard let self else { return }
                 guard let object, let tag = object["tag_name"] as? String else {
-                    self.state = .failed(L10n.t("updateCheckFailed"))
+                    // Automatic checks stay quiet on failure (offline etc.) —
+                    // the user didn't ask for this one.
+                    self.state = silent ? .idle : .failed(L10n.t("updateCheckFailed"))
                     return
                 }
                 self.latestRelease = object
@@ -69,6 +75,32 @@ final class UpdateManager: ObservableObject {
                 self.state = UpdateManager.compare(current, latest) < 0 ? .updateAvailable : .upToDate
             }
         }
+    }
+
+    // MARK: - Automatic checks
+
+    /// Minimum interval between automatic checks (launch / panel-open); quick
+    /// panel toggling must not hammer the unauthenticated API (60 req/hr).
+    static let autoCheckThrottle: TimeInterval = 60
+
+    /// Pure throttle decision (unit-testable).
+    static func isAutoCheckDue(lastCheck: Date?, now: Date, throttle: TimeInterval = autoCheckThrottle) -> Bool {
+        guard let lastCheck else { return true }
+        return now.timeIntervalSince(lastCheck) >= throttle
+    }
+
+    /// Automatic check triggered by app launch or the panel opening: silent
+    /// (no error surface when offline) and throttled; never disturbs a check
+    /// or an update already in progress. The manual button bypasses this.
+    func autoCheckIfDue() {
+        switch state {
+        case .idle, .upToDate, .updateAvailable, .failed:
+            break
+        case .checking, .downloading, .installing:
+            return
+        }
+        guard Self.isAutoCheckDue(lastCheck: lastCheckDate, now: Date()) else { return }
+        checkForUpdates(silent: true)
     }
 
     /// Fetch the latest-release JSON, walking `urls` (direct then proxies) and

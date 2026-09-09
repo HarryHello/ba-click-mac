@@ -27,6 +27,8 @@ struct FXSettings: Codable {
     static let defaultTrailAlwaysVisible: Bool = true
     static let defaultRightClickEnabled: Bool = true
     static let defaultMiddleClickEnabled: Bool = true
+    static let defaultPowerConnectedOnly: Bool = false
+    static let defaultAutoUpdateCheck: Bool = true
     static let defaultClickBrightness: Float = 1.0
     static let defaultClickDiskOpacity: Float = 1.0
     static let defaultTriangleOpacity: Float = 1.0
@@ -50,6 +52,10 @@ struct FXSettings: Codable {
     var trailAlwaysVisible: Bool
     var rightClickEnabled: Bool
     var middleClickEnabled: Bool
+    /// Battery saver: when true, effects only run on AC power.
+    var powerConnectedOnly: Bool
+    /// Check GitHub for updates at app launch and when the panel opens.
+    var autoUpdateCheck: Bool
     var clickBrightness: Float
     var clickDiskOpacity: Float
     var triangleOpacity: Float
@@ -73,6 +79,8 @@ struct FXSettings: Codable {
         trailAlwaysVisible = Self.defaultTrailAlwaysVisible
         rightClickEnabled = Self.defaultRightClickEnabled
         middleClickEnabled = Self.defaultMiddleClickEnabled
+        powerConnectedOnly = Self.defaultPowerConnectedOnly
+        autoUpdateCheck = Self.defaultAutoUpdateCheck
         clickBrightness = Self.defaultClickBrightness
         clickDiskOpacity = Self.defaultClickDiskOpacity
         triangleOpacity = Self.defaultTriangleOpacity
@@ -102,6 +110,8 @@ struct FXSettings: Codable {
         trailAlwaysVisible = try c.decodeIfPresent(Bool.self, forKey: .trailAlwaysVisible) ?? Self.defaultTrailAlwaysVisible
         rightClickEnabled = try c.decodeIfPresent(Bool.self, forKey: .rightClickEnabled) ?? Self.defaultRightClickEnabled
         middleClickEnabled = try c.decodeIfPresent(Bool.self, forKey: .middleClickEnabled) ?? Self.defaultMiddleClickEnabled
+        powerConnectedOnly = try c.decodeIfPresent(Bool.self, forKey: .powerConnectedOnly) ?? Self.defaultPowerConnectedOnly
+        autoUpdateCheck = try c.decodeIfPresent(Bool.self, forKey: .autoUpdateCheck) ?? Self.defaultAutoUpdateCheck
         clickBrightness = try c.decodeIfPresent(Float.self, forKey: .clickBrightness) ?? Self.defaultClickBrightness
         clickDiskOpacity = try c.decodeIfPresent(Float.self, forKey: .clickDiskOpacity) ?? Self.defaultClickDiskOpacity
         triangleOpacity = try c.decodeIfPresent(Float.self, forKey: .triangleOpacity) ?? Self.defaultTriangleOpacity
@@ -115,7 +125,7 @@ struct FXSettings: Codable {
         case clickBloomStrength, trailBloomStrength
         case bloomStrength, bloomLevels, bloomDiffusion, bloomThreshold
         case bloomFalloff, bloomBoost
-        case enabled, trailAlwaysVisible
+        case enabled, trailAlwaysVisible, powerConnectedOnly, autoUpdateCheck
         case rightClickEnabled, middleClickEnabled
         case clickBrightness, clickDiskOpacity, triangleOpacity, refreshRate
     }

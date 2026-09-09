@@ -25,6 +25,11 @@ enum L10n {
         ),
         "rightClickEffect": ("右键点击效果", "Right-Click Effect"),
         "middleClickEffect": ("中键点击效果", "Middle-Click Effect"),
+        "powerConnectedOnly": ("仅接通电源时启用", "Only When Plugged In"),
+        "powerConnectedOnlyHelp": (
+            "使用电池时自动关闭全部特效，把消耗降到最低",
+            "Pause all effects while on battery power to keep the drain near zero"
+        ),
 
         // Sliders
         "trailThickness": ("尾迹粗细", "Trail Thickness"),
@@ -44,8 +49,13 @@ enum L10n {
         "checkForUpdates": ("检查更新", "Check for Updates"),
         "openGitHub": ("GitHub 仓库", "GitHub Repo"),
         "checkingUpdates": ("正在检查更新…", "Checking for updates…"),
-        "upToDate": ("已是最新版本", "You're up to date"),
+        "upToDate": ("v%@ 已是最新版本", "v%@ — You're up to date"),
         "updateAvailable": ("发现新版本", "Update available"),
+        "autoUpdateCheck": ("自动检测更新", "Check for Updates Automatically"),
+        "autoUpdateCheckHelp": (
+            "每次启动软件和打开面板时检查一次",
+            "Checks once at launch and each time the panel opens"
+        ),
         "updateNow": ("立即更新", "Update Now"),
         "downloadingUpdate": ("正在下载更新", "Downloading update"),
         "installingUpdate": ("正在更新，即将重启…", "Updating, restarting…"),

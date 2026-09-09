@@ -11,6 +11,10 @@ struct SettingsPanelView: View {
             Toggle(L10n.t("enableEffects"), isOn: store.binding(\.enabled))
                 .toggleStyle(.switch)
                 .controlSize(.small)
+            Toggle(L10n.t("powerConnectedOnly"), isOn: store.binding(\.powerConnectedOnly))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help(L10n.t("powerConnectedOnlyHelp"))
             Toggle(L10n.t("launchAtLogin"), isOn: $store.launchAtLogin)
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -50,6 +54,11 @@ struct SettingsPanelView: View {
             }
 
             Divider()
+
+            Toggle(L10n.t("autoUpdateCheck"), isOn: store.binding(\.autoUpdateCheck))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help(L10n.t("autoUpdateCheckHelp"))
 
             // Update check + GitHub repo on one row, each expanding to fill
             // the full width. On macOS the button bezel only stretches when the
@@ -103,11 +112,16 @@ struct SettingsPanelView: View {
     private var statusText: some View {
         switch updates.state {
         case .idle:
-            Text("")
+            // Always show the running version when there's nothing to report.
+            Text("v\(AppInfo.version)")
         case .checking:
             Text(L10n.t("checkingUpdates"))
         case .upToDate:
-            Text("\(L10n.t("upToDate")) v\(updates.latestVersion ?? AppInfo.version)")
+            // "upToDate" is a format string ("v%@ 已是最新版本").
+            Text(L10n.t("upToDate").replacingOccurrences(
+                of: "%@",
+                with: "v\(updates.latestVersion ?? AppInfo.version)"
+            ))
         case .updateAvailable:
             Text("\(L10n.t("updateAvailable")) v\(updates.latestVersion ?? "")")
         case .downloading:
@@ -144,11 +158,13 @@ final class SettingsPanelController: NSObject {
     private static let minPanelWidth: CGFloat = 360
 
     private let store: SettingsStore
+    private let updates: UpdateManager
     private var panel: NSPanel?
     private let cornerRadius: CGFloat = 14
 
     init(store: SettingsStore, updateManager: UpdateManager) {
         self.store = store
+        self.updates = updateManager
         super.init()
 
         let hosting = NSHostingView(rootView: SettingsPanelView(store: store, updates: updateManager))
@@ -251,6 +267,10 @@ final class SettingsPanelController: NSObject {
             ))
         }
         panel.makeKeyAndOrderFront(nil)
+        // Auto update check on open (throttled + silent inside UpdateManager).
+        if store.model.autoUpdateCheck {
+            updates.autoCheckIfDue()
+        }
     }
 
     func close() {

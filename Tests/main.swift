@@ -205,6 +205,26 @@ func testUpdateHelperScript() {
     expect(script.contains("SELF=\"$7\""), "helper: reads self-path argument")
 }
 
+// MARK: - Automatic update check throttling (pure)
+
+func testAutoCheckThrottle() {
+    let now = Date()
+    expect(UpdateManager.isAutoCheckDue(lastCheck: nil, now: now), "auto check: first check always due")
+    expect(
+        !UpdateManager.isAutoCheckDue(lastCheck: now.addingTimeInterval(-10), now: now),
+        "auto check: throttled within the window"
+    )
+    expect(
+        UpdateManager.isAutoCheckDue(lastCheck: now.addingTimeInterval(-61), now: now),
+        "auto check: due again after the window"
+    )
+    // A custom (shorter) throttle must be honored.
+    expect(
+        UpdateManager.isAutoCheckDue(lastCheck: now.addingTimeInterval(-10), now: now, throttle: 5),
+        "auto check: honors a custom throttle"
+    )
+}
+
 // MARK: - Update check (live network; opt-in via BA_TEST_NETWORK=1)
 
 /// Exercises the real GitHub latest-release API + proxy fallback. Skipped
@@ -255,6 +275,8 @@ func testFXSettings() {
     expect(defaults.trailAlwaysVisible == true, "default trailAlwaysVisible = true")
     expect(defaults.rightClickEnabled == true, "default rightClickEnabled = true")
     expect(defaults.middleClickEnabled == true, "default middleClickEnabled = true")
+    expect(defaults.powerConnectedOnly == false, "default powerConnectedOnly = false (effects on battery)")
+    expect(defaults.autoUpdateCheck == true, "default autoUpdateCheck = true")
     expect(defaults.clickBrightness == 1.0, "default clickBrightness = 1.0")
     expect(defaults.clickDiskOpacity == 1.0, "default clickDiskOpacity = 1.0")
     expect(defaults.triangleOpacity == 1.0, "default triangleOpacity = 1.0")
@@ -289,6 +311,21 @@ func testFXSettings() {
     let loaded3 = FXSettings.load()
     expect(loaded3.trailScale == 2.2, "invalid JSON falls back to defaults")
 
+    // 0.2.1 toggles decode from a minimal file and round-trip through encode.
+    let fragment = Data(#"{"powerConnectedOnly": true, "autoUpdateCheck": false}"#.utf8)
+    let decoded = try! JSONDecoder().decode(FXSettings.self, from: fragment)
+    expect(decoded.powerConnectedOnly == true, "powerConnectedOnly decodes")
+    expect(decoded.autoUpdateCheck == false, "autoUpdateCheck decodes")
+    expect(decoded.enabled == true, "absent toggles keep defaults")
+    let roundtrip = try! JSONDecoder().decode(
+        FXSettings.self,
+        from: try! JSONEncoder().encode(decoded)
+    )
+    expect(
+        roundtrip.powerConnectedOnly == true && roundtrip.autoUpdateCheck == false,
+        "new toggles round-trip through encode/decode"
+    )
+
     // persistURL prefers an existing cwd settings.json. (Build the expected URL
     // the same way persistURL does — the cwd is /private/var/... while the
     // temp dir URL is /var/..., so a direct string comparison would differ.)
@@ -305,6 +342,7 @@ testL10n()
 testSettingsStore()
 testVersionCompare()
 testProxyURLs()
+testAutoCheckThrottle()
 testUpdateHelperScript()
 testUpdateCheckLive()
 

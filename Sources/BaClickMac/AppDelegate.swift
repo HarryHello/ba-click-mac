@@ -30,6 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = SettingsStore()
     /// GitHub update check + self-update (wired into the panel).
     let updateManager = UpdateManager()
+    /// Battery saver: tracks AC/battery so effects can pause on battery.
+    private let powerMonitor = PowerMonitor()
+    /// Last known AC-power state (updated by `powerMonitor`).
+    private var onACPower = PowerMonitor.isOnACPower
     private var settingsPanel: SettingsPanelController?
     /// Current render timer interval; follows the effect refresh rate.
     private var currentRenderInterval: TimeInterval = 1.0 / 60.0
@@ -111,14 +115,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentRenderInterval = 1.0 / Double(max(1, store.model.refreshRate))
         store.onChange = { [weak self] in
             guard let self else { return }
-            self.renderer?.applySettings(self.store.model)
-            self.syncRenderTimer()
-            if !self.store.model.enabled {
-                self.renderer?.particleSystem.clear()
+            self.applyCurrentSettings()
+        }
+
+        // Battery saver: re-evaluate effects whenever AC/battery state changes.
+        powerMonitor.onPowerStateChanged = { [weak self] in
+            guard let self else { return }
+            self.onACPower = PowerMonitor.isOnACPower
+            self.applyCurrentSettings()
+        }
+        powerMonitor.start()
+
+        // Auto update check shortly after launch (opt-out; throttled + silent).
+        if store.model.autoUpdateCheck {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                self?.updateManager.autoCheckIfDue()
             }
         }
 
-        // This overlay is never the frontmost app, so App Nap would throttle
+    /// This overlay is never the frontmost app, so App Nap would throttle
         // its timers/rendering randomly. Assert an activity so clicks are
         // always processed and frames always drawn.
         activityToken = ProcessInfo.processInfo.beginActivity(
@@ -208,28 +223,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dense even when events are coalesced. The click still feeds directly.
         let monitor = MouseMonitor()
         monitor.onMouseDown = { [weak renderer, weak self] point in
-            guard let self, self.store.model.enabled else { return }
+            guard let self, self.effectsAllowed else { return }
             self.startRenderTimer() // wake the idle-stopped render loop
             renderer?.particleSystem.addClick(at: point)
         }
         monitor.onRightMouseDown = { [weak renderer, weak self] point in
-            guard let self, self.store.model.enabled, self.store.model.rightClickEnabled else { return }
+            guard let self, self.effectsAllowed, self.store.model.rightClickEnabled else { return }
             self.startRenderTimer()
             renderer?.particleSystem.addClick(at: point)
         }
         monitor.onMiddleMouseDown = { [weak renderer, weak self] point in
-            guard let self, self.store.model.enabled, self.store.model.middleClickEnabled else { return }
+            guard let self, self.effectsAllowed, self.store.model.middleClickEnabled else { return }
             self.startRenderTimer()
             renderer?.particleSystem.addClick(at: point)
         }
         monitor.onMouseDrag = { [weak self] _ in
-            guard let self, self.store.model.enabled else { return }
+            guard let self, self.effectsAllowed else { return }
             self.startRenderTimer()
         }
         monitor.onMouseMove = { [weak self] _ in
             // Trail follows a free move only when "always visible" is on;
             // dragging (left button held) always wakes it.
-            guard let self, self.store.model.enabled, self.store.model.trailAlwaysVisible else { return }
+            guard let self, self.effectsAllowed, self.store.model.trailAlwaysVisible else { return }
             self.startRenderTimer()
         }
         monitor.start()
@@ -244,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Float(frame.midY)
             )
             let loop = Timer(timeInterval: 0.9, repeats: true) { [weak renderer, weak self] _ in
-                guard let self, self.store.model.enabled else { return }
+                guard let self, self.effectsAllowed else { return }
                 self.startRenderTimer()
                 renderer?.particleSystem.addClick(at: center)
             }
@@ -295,6 +310,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Effects availability: the master switch AND, when the battery-saver
+    /// toggle is on, AC power (desktops without a battery always count as AC).
+    private var effectsAllowed: Bool {
+        store.model.enabled && (!store.model.powerConnectedOnly || onACPower)
+    }
+
+    /// Apply the current settings and refresh the render loop. Called on any
+    /// settings change and on power-state changes (battery saver).
+    private func applyCurrentSettings() {
+        renderer?.applySettings(store.model)
+        syncRenderTimer()
+        if !effectsAllowed {
+            renderer?.particleSystem.clear()
+        }
+    }
+
     /// Start the manual render loop at the configured refresh rate
     /// (idempotent). Uses a vsync-synced CADisplayLink (smooth, no
     /// frame-phase jitter). The MTKView keeps its own display link paused;
@@ -329,7 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// events while the main thread is busy rendering.
     @objc private func renderTick() {
         guard let overlayView, let renderer else { return }
-        if store.model.enabled {
+        if effectsAllowed {
             // Bit 0 = left, bit 1 = right, bit 2 = middle (button 3). Any held
             // button feeds the trail so right/middle drags also draw it when
             // "always visible" is off.
