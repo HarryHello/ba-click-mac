@@ -22,7 +22,7 @@ SIGN_IDENTITY="${BA_CLICK_SIGN_IDENTITY:-BA Click Mac Signing}"
 # macOS 14 is the floor: the primary render driver is a CADisplayLink
 # (the macOS 13 Timer fallback stays in the code but is no longer a target).
 DEPLOY_TARGET="14.0"
-FRAMEWORKS="-framework AppKit -framework Metal -framework MetalKit -framework MetalPerformanceShaders -framework CoreGraphics -framework QuartzCore -framework IOKit"
+FRAMEWORKS="-framework AppKit -framework Metal -framework MetalKit -framework MetalPerformanceShaders -framework CoreGraphics -framework QuartzCore -framework IOKit -framework ServiceManagement"
 
 MODE="${1:-}"
 

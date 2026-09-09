@@ -205,6 +205,23 @@ func testUpdateHelperScript() {
     expect(script.contains("SELF=\"$7\""), "helper: reads self-path argument")
 }
 
+// MARK: - SingleInstance lock (filesystem)
+
+func testSingleInstanceLock() {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("baclick-tests-\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let lock = dir.appendingPathComponent("instance.lock")
+
+    expect(SingleInstance.acquire(lockURL: lock), "first acquire wins the lock")
+    expect(!SingleInstance.acquire(lockURL: lock), "second acquire on the same lock is refused")
+    expect(
+        SingleInstance.acquire(lockURL: dir.appendingPathComponent("other.lock")),
+        "a different lock file is independent"
+    )
+}
+
 // MARK: - Up-to-date label formatting (pure)
 
 func testUpToDateLabel() {
@@ -355,6 +372,7 @@ testL10n()
 testSettingsStore()
 testVersionCompare()
 testProxyURLs()
+testSingleInstanceLock()
 testUpToDateLabel()
 testAutoCheckThrottle()
 testUpdateHelperScript()
