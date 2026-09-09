@@ -158,26 +158,59 @@ func testVersionCompare() {
     expect(UpdateManager.compare([1, 2], [1, 2, 1]) == -1, "compare: shorter is older")
 }
 
-// MARK: - Update check (live network; opt-in via BA_TEST_NETWORK=1)
+// MARK: - GitHub proxy URL construction (pure)
 
-/// Exercises the real GitHub latest-release API + proxy fallback. Skipped
-/// unless BA_TEST_NETWORK is set (unauthenticated API is rate-limited to 60/hr).
-func testUpdateCheckLive() {
-    guard getenv("BA_TEST_NETWORK") != nil else { return }
-
-    // Proxy URL construction (no network).
+func testProxyURLs() {
     for prefix in GitHubProxy.api {
         expect(
             URL(string: prefix + AppInfo.latestReleaseAPI.absoluteString) != nil,
             "proxy API URL builds: \(prefix)"
         )
+        expect(prefix.hasSuffix("/"), "proxy API prefix ends with /: \(prefix)")
     }
     for prefix in GitHubProxy.download {
         expect(
             URL(string: prefix + "https://github.com/x/y/releases/download/v1/a.dmg") != nil,
             "proxy download URL builds: \(prefix)"
         )
+        expect(prefix.hasSuffix("/"), "proxy download prefix ends with /: \(prefix)")
     }
+}
+
+// MARK: - Update helper script safety invariants (pure)
+
+/// The helper script replaces the running app, so its safety behavior is
+/// release-critical: pin the invariants here (it runs detached after the app
+/// quits, where nothing else guards it).
+func testUpdateHelperScript() {
+    let script = UpdateManager.helperScriptText()
+
+    expect(script.hasPrefix("#!/bin/bash"), "helper: shebang")
+
+    // Signature gate: only replace the app with a build signed by the same
+    // certificate (designated requirement = identifier + pinned cert hash).
+    expect(script.contains("designated => "), "helper: extracts running app's requirement")
+    expect(script.contains("codesign --verify --strict -R="), "helper: verifies new app against requirement")
+    expect(script.contains("-z \"$REQ\""), "helper: refuses when no requirement can be extracted")
+
+    // Atomic swap with rollback: stage a copy first, rename-swap, restore the
+    // old app if the swap fails. The old delete-then-copy must stay gone.
+    expect(script.contains(".ba-click-update-stage"), "helper: stages the new app beside the old one")
+    expect(script.contains(".ba-click-update-old"), "helper: keeps the old app until the swap succeeds")
+    expect(script.contains("mv \"$OLD\" \"$CURRENT_APP\""), "helper: rolls back on failed swap")
+    expect(!script.contains("rm -rf \"$CURRENT_APP\""), "helper: never deletes the running app up front")
+
+    // Args are positional; $1..$7 must stay in sync with spawnDetached.
+    expect(script.contains("APP_PID=\"$1\""), "helper: reads pid argument")
+    expect(script.contains("SELF=\"$7\""), "helper: reads self-path argument")
+}
+
+// MARK: - Update check (live network; opt-in via BA_TEST_NETWORK=1)
+
+/// Exercises the real GitHub latest-release API + proxy fallback. Skipped
+/// unless BA_TEST_NETWORK is set (unauthenticated API is rate-limited to 60/hr).
+func testUpdateCheckLive() {
+    guard getenv("BA_TEST_NETWORK") != nil else { return }
 
     // Full checkForUpdates() flow: direct, then proxies.
     let manager = UpdateManager()
@@ -271,6 +304,8 @@ testFXSettings()
 testL10n()
 testSettingsStore()
 testVersionCompare()
+testProxyURLs()
+testUpdateHelperScript()
 testUpdateCheckLive()
 
 print("passed: \(passed), failed: \(failures)")

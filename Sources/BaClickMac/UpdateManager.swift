@@ -295,12 +295,12 @@ final class UpdateManager: ObservableObject {
         return dir.appendingPathComponent("update.log")
     }
 
-    /// The helper does the work after the app quits: wait for the old process
-    /// to exit, replace the bundle, detach the DMG, clean up, relaunch.
-    private func writeHelperScript(to url: URL) -> Bool {
+    /// The update helper script text. Internal (not private) so the unit
+    /// tests can assert on its safety invariants.
+    static func helperScriptText() -> String {
         // Positional args ($1...$7) are supplied by spawnDetached; every path
         // is double-quoted so spaces in e.g. "BA Click.app" are safe.
-        let script = """
+        """
         #!/bin/bash
         set -u
         APP_PID="$1"; CURRENT_APP="$2"; NEW_APP="$3"; DMG="$4"; MOUNT="$5"; LOG="$6"; SELF="$7"
@@ -317,9 +317,32 @@ final class UpdateManager: ObservableObject {
           rm -f "$DMG" "$SELF" || true
           exit 1
         fi
-        if rm -rf "$CURRENT_APP" && ditto "$NEW_APP" "$CURRENT_APP"; then
+        # Only ever replace the running app with a build signed by the *same*
+        # certificate: the new app must satisfy the running app's designated
+        # requirement (identifier + pinned certificate hash). A tampered DMG
+        # (e.g. served by a proxy) fails this and is refused.
+        REQ="$(/usr/bin/codesign -d -r- "$CURRENT_APP" 2>&1 | sed -n 's/^designated => //p')"
+        if [ -z "$REQ" ] || ! /usr/bin/codesign --verify --strict -R="$REQ" "$NEW_APP" >>"$LOG" 2>&1; then
+          log "ERROR: signature check failed for $NEW_APP — refusing to replace"
+          open "https://github.com/HarryHello/ba-click-mac/releases"
+          hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+          rm -f "$DMG" "$SELF" || true
+          exit 1
+        fi
+        # Swap atomically: copy the new app to a staging dir beside the old
+        # one, then rename-swap — so a failed copy can't leave no app at all.
+        APP_DIR="$(dirname "$CURRENT_APP")"
+        STAGE="$APP_DIR/.ba-click-update-stage"
+        OLD="$APP_DIR/.ba-click-update-old"
+        rm -rf "$STAGE" "$OLD"
+        if ditto "$NEW_APP" "$STAGE" && mv "$CURRENT_APP" "$OLD" && mv "$STAGE" "$CURRENT_APP"; then
           log "replaced $CURRENT_APP"
+          rm -rf "$OLD"
         else
+          if [ ! -d "$CURRENT_APP" ] && [ -d "$OLD" ]; then
+            mv "$OLD" "$CURRENT_APP"
+          fi
+          rm -rf "$STAGE"
           log "ERROR: failed to replace $CURRENT_APP"
           open "https://github.com/HarryHello/ba-click-mac/releases"
         fi
@@ -331,8 +354,11 @@ final class UpdateManager: ObservableObject {
         log "done"
         exit 0
         """
+    }
+
+    private func writeHelperScript(to url: URL) -> Bool {
         do {
-            try script.write(to: url, atomically: true, encoding: .utf8)
+            try Self.helperScriptText().write(to: url, atomically: true, encoding: .utf8)
             return true
         } catch {
             dlog("[update] could not write helper script: \(error)")
