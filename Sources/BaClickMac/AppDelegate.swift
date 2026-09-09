@@ -14,10 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickLoopTimer: Timer?
     /// Menu bar (status) item so the overlay can be quit without the Dock.
     private var statusItem: NSStatusItem?
-    /// Manual render loop driver: CADisplayLink (vsync-synced, macOS 14+) or a
-    /// fallback Timer. We call MTKView.draw() ourselves so rendering never
-    /// depends on the MTKView's own (fragile) display-link lifecycle.
-    private var renderTimer: Timer?
+    /// Manual render loop driver: a vsync-synced CADisplayLink. We call
+    /// MTKView.draw() ourselves so rendering never depends on the MTKView's
+    /// own (fragile) display-link lifecycle.
     private var renderDisplayLink: CADisplayLink?
     /// Prevents App Nap from throttling the render timer while we are a
     /// non-activating background overlay.
@@ -88,9 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayView.colorPixelFormat = .bgra8Unorm
         overlayView.preferredFramesPerSecond = 60
         // Manual render loop: pause the MTKView's internal display link and
-        // drive draw() ourselves (see startRenderTimer). The display link
+        // drive draw() ourselves (see startRenderTimer). The MTKView link
         // stalls randomly after Space/fullscreen transitions; a self-driven
-        // timer keeps rendering deterministic.
+        // loop keeps rendering deterministic.
         overlayView.isPaused = true
         overlayView.enableSetNeedsDisplay = false
         self.overlayView = overlayView
@@ -283,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if fullscreenHidden { return }
         // If we intentionally stopped rendering while idle (see
         // startRenderTimer), that's not a stall either.
-        guard renderTimer != nil || renderDisplayLink != nil else { return }
+        guard renderDisplayLink != nil else { return }
         let now = CACurrentMediaTime()
         if renderer.lastDrawTime == 0 || now - renderer.lastDrawTime > Self.stallThreshold {
             // The driver may have stalled (e.g. display link after a Space
@@ -297,39 +296,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Start the manual render loop at the configured refresh rate
-    /// (idempotent). Uses a vsync-synced CADisplayLink on macOS 14+ (smooth,
-    /// no frame-phase jitter), falling back to a Timer on macOS 13. The MTKView
-    /// keeps its own display link paused; we call draw() ourselves so rendering
-    /// never depends on the MTKView's fragile display-link lifecycle.
+    /// (idempotent). Uses a vsync-synced CADisplayLink (smooth, no
+    /// frame-phase jitter). The MTKView keeps its own display link paused;
+    /// we call draw() ourselves so rendering never depends on the MTKView's
+    /// fragile display-link lifecycle.
     ///
     /// Power saving: the loop stops itself as soon as nothing is on screen
     /// (idle -> zero GPU work). Clicks / mouse moves / the click-loop wake it
     /// up again.
     private func startRenderTimer() {
-        guard renderTimer == nil, renderDisplayLink == nil, let overlayView else { return }
+        guard renderDisplayLink == nil, let overlayView else { return }
         overlayView.isPaused = true
-        if #available(macOS 14.0, *) {
-            let link = overlayView.displayLink(target: self, selector: #selector(renderTick))
-            link.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
-            link.add(to: .main, forMode: .common)
-            renderDisplayLink = link
-        } else {
-            let timer = Timer(timeInterval: currentRenderInterval, repeats: true) { [weak self] _ in
-                self?.renderTick()
-            }
-            RunLoop.main.add(timer, forMode: .common)
-            renderTimer = timer
-        }
+        let link = overlayView.displayLink(target: self, selector: #selector(renderTick))
+        link.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
+        link.add(to: .main, forMode: .common)
+        renderDisplayLink = link
     }
 
     private func stopRenderTimer() {
-        renderTimer?.invalidate()
-        renderTimer = nil
         renderDisplayLink?.invalidate()
         renderDisplayLink = nil
     }
 
-    @available(macOS 14.0, *)
     private func frameRateRange(for rate: Int) -> CAFrameRateRange {
         CAFrameRateRange(minimum: 24, maximum: 240, preferred: Float(max(1, rate)))
     }
@@ -365,13 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let interval = 1.0 / Double(max(1, store.model.refreshRate))
         if abs(interval - currentRenderInterval) > 0.0001 {
             currentRenderInterval = interval
-            if #available(macOS 14.0, *) {
-                renderDisplayLink?.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
-            }
-            if renderTimer != nil {
-                stopRenderTimer()
-                startRenderTimer()
-            }
+            renderDisplayLink?.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
         }
     }
 
