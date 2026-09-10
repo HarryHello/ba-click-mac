@@ -16,7 +16,7 @@ enum AppInfo {
            !v.isEmpty {
             return v
         }
-        return "0.3.0" // keep in sync with build.sh VERSION
+        return "0.3.1" // keep in sync with build.sh VERSION
     }
 
     /// The DMG asset name suffix for the running architecture.

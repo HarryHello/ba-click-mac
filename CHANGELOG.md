@@ -4,7 +4,7 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 
 ---
 
-## [Unreleased]
+## [0.3.1] - 2026-09-11
 
 ### 优化 / Performance
 - **压力下渲染分辨率自适应减半（三处修正）**：降级判据改为"画面陈旧度 EMA 持续超 100ms"（= 用户实际可感知的滞后）或 pacer 降级——偶发的在途跳过不再触发，轻度负载（GPU 10%）下完全不降级；期望分辨率按 `点数 × backingScaleFactor × 系数` 正确计算，修复内置 Retina 屏被误降到原生 1/2 甚至 1/4 导致的明显锯齿（外接屏正常、内置屏锯齿的原因）；期望尺寸每 tick 校验补齐，修复转换瞬间在途的显示器永久卡在旧分辨率的问题（该翻转风暴也是跨屏点击卡顿的来源）。
