@@ -80,15 +80,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var lastHUDCounters = HUDCounters()
     private var lastOverlayDrawTime: TimeInterval = 0
-    /// Render-scale degradation: under GPU pressure (pacer degraded, or an
-    /// in-flight skip seen recently) overlays render at half resolution —
-    /// pixel cost falls 4x so frames complete sooner and the draw rate
-    /// recovers. Glow content tolerates the upscale invisibly, and unlike
-    /// temporal tricks there is no ghosting. Full resolution returns ~3s
-    /// after the pressure clears.
+    /// Render-scale degradation: when the VISIBLE frame goes stale (EMA of
+    /// time-since-last-draw sustained over 100ms, or the pacer degraded)
+    /// overlays render at half resolution — pixel cost falls 4x so frames
+    /// complete sooner and the draw rate recovers. Glow content tolerates the
+    /// upscale; full resolution returns as soon as staleness decays.
+    ///
+    /// The expected drawable size is frame × backingScaleFactor × scale and
+    /// is enforced EVERY tick: an overlay that was mid-flight during a
+    /// transition would otherwise keep a stale scale forever (this showed as
+    /// one display crisp while the other pixelated). Backing scale matters —
+    /// a Retina display's native drawable is 2x its point size, and ignoring
+    /// that pixelated built-in displays while externals looked fine.
     private var renderScale: CGFloat = 1.0
-    private var pressureUntil: TimeInterval = 0
-    private var lastInFlightSkipMark = 0
+    private var drawStalenessEMA: Double = 0
     private var settingsPanel: SettingsPanelController?
     /// Current render timer interval; follows the effect refresh rate.
     private var currentRenderInterval: TimeInterval = 1.0 / 60.0
@@ -498,6 +503,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let now = CACurrentMediaTime()
         lastRenderTickTime = now
         hudTicks += 1
+
+        // Visible-frame staleness as of tick start (before this tick's draws
+        // refresh it): the pressure signal for render-scale degradation.
+        if effectsAllowed, lastOverlayDrawTime > 0 {
+            let staleness = max(0, min(now - lastOverlayDrawTime, 0.5))
+            drawStalenessEMA = drawStalenessEMA * 0.9 + staleness * 0.1
+        }
+
         let drawNow = drawPacer.shouldDraw(at: now, budget: currentRenderInterval)
         if effectsAllowed {
             // Bit 0 = left, bit 1 = right, bit 2 = middle (button 3). Any held
@@ -536,24 +549,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hudPacerSkips += 1
         }
 
-        // GPU-pressure signals (pacer degraded, or a frame still executing on
-        // the GPU) drop overlays to half resolution: pixel cost falls 4x so
-        // frames complete sooner and the draw rate recovers — without any
-        // temporal artifact. Full resolution returns once pressure clears.
-        if drawPacer.degraded || hudInFlightSkips != lastInFlightSkipMark {
-            lastInFlightSkipMark = hudInFlightSkips
-            pressureUntil = now + 3.0
-        }
-        let underPressure = now < pressureUntil
+        // Render-scale pressure: sustained visible staleness (>100ms EMA) or
+        // a degraded pacer. The expected drawable size is re-enforced every
+        // tick; an overlay mid-flight during a transition catches up on the
+        // next tick instead of keeping a stale scale forever.
+        let underPressure = drawPacer.degraded || drawStalenessEMA > 0.1
         let targetScale: CGFloat = underPressure ? 0.5 : 1.0
-        if targetScale != renderScale {
-            renderScale = targetScale
-            for overlay in overlays where !overlay.renderer.isFrameInFlight {
-                let size = overlay.view.frame.size
-                overlay.view.drawableSize = CGSize(
-                    width: size.width * targetScale,
-                    height: size.height * targetScale
-                )
+        renderScale = targetScale
+        for overlay in overlays {
+            let size = overlay.view.frame.size
+            let backing = overlay.view.window?.backingScaleFactor
+                ?? overlay.view.layer?.contentsScale
+                ?? 1
+            let expected = CGSize(
+                width: (size.width * backing * targetScale).rounded(),
+                height: (size.height * backing * targetScale).rounded()
+            )
+            let current = overlay.view.drawableSize
+            if abs(current.width - expected.width) > 1 || abs(current.height - expected.height) > 1 {
+                guard !overlay.renderer.isFrameInFlight else { continue }
+                overlay.view.drawableSize = expected
             }
         }
         // Nothing left on any screen -> stop until the next interaction.
