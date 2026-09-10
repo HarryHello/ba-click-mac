@@ -80,9 +80,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var lastHUDCounters = HUDCounters()
     private var lastOverlayDrawTime: TimeInterval = 0
-    /// GPU-pressure signal: an in-flight skip (previous frame still executing)
-    /// keeps temporal bloom reuse on for this long afterwards.
-    private var bloomReuseCooldownUntil: TimeInterval = 0
+    /// Render-scale degradation: under GPU pressure (pacer degraded, or an
+    /// in-flight skip seen recently) overlays render at half resolution —
+    /// pixel cost falls 4x so frames complete sooner and the draw rate
+    /// recovers. Glow content tolerates the upscale invisibly, and unlike
+    /// temporal tricks there is no ghosting. Full resolution returns ~3s
+    /// after the pressure clears.
+    private var renderScale: CGFloat = 1.0
+    private var pressureUntil: TimeInterval = 0
     private var lastInFlightSkipMark = 0
     private var settingsPanel: SettingsPanelController?
     /// Current render timer interval; follows the effect refresh rate.
@@ -531,16 +536,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hudPacerSkips += 1
         }
 
-        // Under GPU pressure (pacer degraded, or a frame still executing on
-        // the GPU) switch to temporal bloom reuse: intermediate frames
-        // composite the last glow, cutting the dominant per-frame GPU cost so
-        // frames complete sooner and the draw rate recovers.
-        if hudInFlightSkips != lastInFlightSkipMark {
+        // GPU-pressure signals (pacer degraded, or a frame still executing on
+        // the GPU) drop overlays to half resolution: pixel cost falls 4x so
+        // frames complete sooner and the draw rate recovers — without any
+        // temporal artifact. Full resolution returns once pressure clears.
+        if drawPacer.degraded || hudInFlightSkips != lastInFlightSkipMark {
             lastInFlightSkipMark = hudInFlightSkips
-            bloomReuseCooldownUntil = now + 2.0
+            pressureUntil = now + 3.0
         }
-        let bloomReuse = drawPacer.degraded || now < bloomReuseCooldownUntil
-        overlays.forEach { $0.renderer.bloomTemporalReuse = bloomReuse }
+        let underPressure = now < pressureUntil
+        let targetScale: CGFloat = underPressure ? 0.5 : 1.0
+        if targetScale != renderScale {
+            renderScale = targetScale
+            for overlay in overlays where !overlay.renderer.isFrameInFlight {
+                let size = overlay.view.frame.size
+                overlay.view.drawableSize = CGSize(
+                    width: size.width * targetScale,
+                    height: size.height * targetScale
+                )
+            }
+        }
         // Nothing left on any screen -> stop until the next interaction.
         if !overlays.contains(where: { $0.renderer.particleSystem.hasActiveParticles() }) {
             stopRenderTimer()
@@ -642,17 +657,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if lastOverlayDrawTime > 0 {
             drawAgeText = String(format: "%.0f", (now - lastOverlayDrawTime) * 1000)
         }
-        let bloomReuseOn = drawPacer.degraded || now < bloomReuseCooldownUntil
         let bloomState = renderer.map { $0.bloomEnabled ? "ON" : "OFF" } ?? "?"
         label.stringValue = String(
-            format: "tick=%d/s draw=%d/s skip(pacer=%d inflight=%d empty=%d) deg=%d bloomReuse=%d drawAge=%@ms | bloom=%@ trail=%d",
+            format: "tick=%d/s draw=%d/s skip(pacer=%d inflight=%d empty=%d) deg=%d scale=%.2f drawAge=%@ms | bloom=%@ trail=%d",
             rate(hudTicks, prev.ticks),
             rate(hudDraws, prev.draws),
             rate(hudPacerSkips, prev.pacerSkips),
             rate(hudInFlightSkips, prev.inFlightSkips),
             rate(hudEmptySkips, prev.emptySkips),
             drawPacer.degraded ? 1 : 0,
-            bloomReuseOn ? 1 : 0,
+            renderScale,
             drawAgeText,
             bloomState,
             renderer?.particleSystem.trail.count ?? 0
