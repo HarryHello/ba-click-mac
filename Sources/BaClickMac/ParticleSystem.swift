@@ -119,14 +119,6 @@ final class ParticleSystem {
         !bursts.isEmpty || !shards.isEmpty || !trail.isEmpty
     }
 
-    /// Age in seconds of the newest trail point (nil when empty). The
-    /// diagnostic HUD uses this to tell "sampling stalled" (large age) apart
-    /// from "frames dropped / compositor lag" (small age).
-    func newestTrailPointAge(now: Double) -> Double? {
-        guard let newest = trail.last else { return nil }
-        return now - newest.time
-    }
-
     /// Immediately drop every particle/trail/queued click (used when the
     /// effect master switch is turned off).
     func clear() {

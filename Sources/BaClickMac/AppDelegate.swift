@@ -79,6 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var emptySkips = 0
     }
     private var lastHUDCounters = HUDCounters()
+    private var lastOverlayDrawTime: TimeInterval = 0
+    /// GPU-pressure signal: an in-flight skip (previous frame still executing)
+    /// keeps temporal bloom reuse on for this long afterwards.
+    private var bloomReuseCooldownUntil: TimeInterval = 0
+    private var lastInFlightSkipMark = 0
     private var settingsPanel: SettingsPanelController?
     /// Current render timer interval; follows the effect refresh rate.
     private var currentRenderInterval: TimeInterval = 1.0 / 60.0
@@ -519,11 +524,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     continue
                 }
                 overlay.view.draw()
+                lastOverlayDrawTime = now
                 hudDraws += 1
             }
         } else {
             hudPacerSkips += 1
         }
+
+        // Under GPU pressure (pacer degraded, or a frame still executing on
+        // the GPU) switch to temporal bloom reuse: intermediate frames
+        // composite the last glow, cutting the dominant per-frame GPU cost so
+        // frames complete sooner and the draw rate recovers.
+        if hudInFlightSkips != lastInFlightSkipMark {
+            lastInFlightSkipMark = hudInFlightSkips
+            bloomReuseCooldownUntil = now + 2.0
+        }
+        let bloomReuse = drawPacer.degraded || now < bloomReuseCooldownUntil
+        overlays.forEach { $0.renderer.bloomTemporalReuse = bloomReuse }
         // Nothing left on any screen -> stop until the next interaction.
         if !overlays.contains(where: { $0.renderer.particleSystem.hasActiveParticles() }) {
             stopRenderTimer()
@@ -618,20 +635,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        var sampleAgeText = "n/a"
-        if let renderer, let age = renderer.particleSystem.newestTrailPointAge(now: now) {
-            sampleAgeText = String(format: "%.0f", age * 1000)
+        // Visible-frame staleness: time since the last real draw. This is the
+        // metric that reflects perceived trail lag (sampling is always fresh;
+        // the SCREEN is only as old as the last draw).
+        var drawAgeText = "n/a"
+        if lastOverlayDrawTime > 0 {
+            drawAgeText = String(format: "%.0f", (now - lastOverlayDrawTime) * 1000)
         }
+        let bloomReuseOn = drawPacer.degraded || now < bloomReuseCooldownUntil
         let bloomState = renderer.map { $0.bloomEnabled ? "ON" : "OFF" } ?? "?"
         label.stringValue = String(
-            format: "tick=%d/s draw=%d/s skip(pacer=%d inflight=%d empty=%d) deg=%d sampleAge=%@ms | bloom=%@ trail=%d",
+            format: "tick=%d/s draw=%d/s skip(pacer=%d inflight=%d empty=%d) deg=%d bloomReuse=%d drawAge=%@ms | bloom=%@ trail=%d",
             rate(hudTicks, prev.ticks),
             rate(hudDraws, prev.draws),
             rate(hudPacerSkips, prev.pacerSkips),
             rate(hudInFlightSkips, prev.inFlightSkips),
             rate(hudEmptySkips, prev.emptySkips),
             drawPacer.degraded ? 1 : 0,
-            sampleAgeText,
+            bloomReuseOn ? 1 : 0,
+            drawAgeText,
             bloomState,
             renderer?.particleSystem.trail.count ?? 0
         )

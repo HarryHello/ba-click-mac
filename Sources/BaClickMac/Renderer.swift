@@ -74,6 +74,15 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// Written from Metal's completion queue, read from the main thread; a
     /// word-sized Bool store is effectively atomic on our targets.
     private(set) var isFrameInFlight = false
+    /// When true, the bloom pyramid is re-rendered only every
+    /// `bloomReuseInterval` draws; intermediate frames composite the last
+    /// glow. The halo changes slowly, so reuse is invisible — while the
+    /// pyramid (prefilter + per-level down/up) dominates per-frame GPU cost,
+    /// and under contention a cheaper frame completes sooner, keeping the
+    /// draw rate up. The app flips this on under GPU pressure.
+    var bloomTemporalReuse = false
+    static let bloomReuseInterval = 3
+    private var drawsSinceBloomRender = 0
 
     private let circleTexture: MTLTexture
     private let ringTexture: MTLTexture
@@ -291,6 +300,11 @@ final class Renderer: NSObject, MTKViewDelegate {
             !triangleVertices.isEmpty || !trailVertices.isEmpty
 
         // 1) MXFinalBloom-style multi-level bloom on a single HDR scene.
+        //    The scene pass stays fresh every frame; the pyramid re-renders
+        //    only when allowed to (temporal reuse under GPU pressure) and
+        //    intermediate composites sample the last glow instead.
+        let renderBloomChain = !bloomTemporalReuse
+            || drawsSinceBloomRender >= Self.bloomReuseInterval
         if bloomEnabled, hasContent,
            let hdr = hdrSceneTexture,
            !bloomDownTextures.isEmpty,
@@ -312,25 +326,28 @@ final class Renderer: NSObject, MTKViewDelegate {
                 encoder.endEncoding()
             }
 
-            // Prefilter bright energy, downsample, upsample.
-            renderPrefilter(source: hdr, dest: bloomDownTextures[0], commandBuffer: commandBuffer)
-            for i in 1..<bloomLevelCount {
-                renderDownsample(source: bloomDownTextures[i - 1], dest: bloomDownTextures[i], commandBuffer: commandBuffer)
-            }
-            let last = bloomLevelCount - 1
-            if let blit = commandBuffer.makeBlitCommandEncoder() {
-                blit.copy(from: bloomDownTextures[last], to: bloomUpTextures[last])
-                blit.endEncoding()
-            }
-            if bloomLevelCount >= 2 {
-                for i in stride(from: bloomLevelCount - 2, through: 0, by: -1) {
-                    renderUpsample(
-                        coarse: bloomUpTextures[i + 1],
-                        fine: bloomDownTextures[i],
-                        dest: bloomUpTextures[i],
-                        commandBuffer: commandBuffer
-                    )
+            if renderBloomChain {
+                // Prefilter bright energy, downsample, upsample.
+                renderPrefilter(source: hdr, dest: bloomDownTextures[0], commandBuffer: commandBuffer)
+                for i in 1..<bloomLevelCount {
+                    renderDownsample(source: bloomDownTextures[i - 1], dest: bloomDownTextures[i], commandBuffer: commandBuffer)
                 }
+                let last = bloomLevelCount - 1
+                if let blit = commandBuffer.makeBlitCommandEncoder() {
+                    blit.copy(from: bloomDownTextures[last], to: bloomUpTextures[last])
+                    blit.endEncoding()
+                }
+                if bloomLevelCount >= 2 {
+                    for i in stride(from: bloomLevelCount - 2, through: 0, by: -1) {
+                        renderUpsample(
+                            coarse: bloomUpTextures[i + 1],
+                            fine: bloomDownTextures[i],
+                            dest: bloomUpTextures[i],
+                            commandBuffer: commandBuffer
+                        )
+                    }
+                }
+                drawsSinceBloomRender = 0
             }
         }
 
@@ -359,6 +376,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
 
         if bloomEnabled, hasContent, let finalBloom = bloomUpTextures.first, let hdrScene = hdrSceneTexture {
+            drawsSinceBloomRender += 1
             encoder.setRenderPipelineState(bloomAddPipeline)
             encoder.setFragmentTexture(finalBloom, index: 0)
             encoder.setFragmentTexture(hdrScene, index: 1)
