@@ -56,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let powerMonitor = PowerMonitor()
     /// Last known AC-power state (updated by `powerMonitor`).
     private var onACPower = PowerMonitor.isOnACPower
+    /// Adaptive draw pacing: under GPU contention (other apps squeezing the
+    /// GPU) ticks slow down and the trail head would lag the cursor — this
+    /// skips every second DRAW while sampling stays full-rate.
+    private var drawPacer = DrawPacer()
     private var settingsPanel: SettingsPanelController?
     /// Current render timer interval; follows the effect refresh rate.
     private var currentRenderInterval: TimeInterval = 1.0 / 60.0
@@ -461,6 +465,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// events while the main thread is busy rendering.
     @objc private func renderTick() {
         guard !overlays.isEmpty else { return }
+        let now = CACurrentMediaTime()
+        let drawNow = drawPacer.shouldDraw(at: now, budget: currentRenderInterval)
         if effectsAllowed {
             // Bit 0 = left, bit 1 = right, bit 2 = middle (button 3). Any held
             // button feeds the trail so right/middle drags also draw it when
@@ -474,14 +480,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-        // Draw only overlays that still show something: the one under the
-        // cursor just received the trail point, others may still be fading
-        // out. Empty displays skip their whole scene+bloom pipeline, which
-        // halves (or better) the per-tick GPU cost on multi-display setups
-        // with no visible difference.
-        overlays.forEach { overlay in
-            if overlay.renderer.particleSystem.hasActiveParticles() {
-                overlay.view.draw()
+        // Skipped draws only delay the repaint; the accumulated trail points
+        // are all rendered on the next draw, so nothing is lost.
+        if drawNow {
+            overlays.forEach { overlay in
+                if overlay.renderer.particleSystem.hasActiveParticles() {
+                    overlay.view.draw()
+                }
             }
         }
         // Nothing left on any screen -> stop until the next interaction.
@@ -496,6 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let interval = 1.0 / Double(max(1, store.model.refreshRate))
         if abs(interval - currentRenderInterval) > 0.0001 {
             currentRenderInterval = interval
+            drawPacer.reset(budget: interval)
             renderDisplayLink?.preferredFrameRateRange = frameRateRange(for: store.model.refreshRate)
         }
     }

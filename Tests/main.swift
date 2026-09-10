@@ -228,6 +228,61 @@ func testUpdateHelperScript() {
     expect(script.contains("SELF=\"$7\""), "helper: reads self-path argument")
 }
 
+// MARK: - DrawPacer adaptive pacing
+
+func testDrawPacer() {
+    let budget = 1.0 / 240.0
+
+    // Healthy pacing: ticks exactly on budget -> always draws, no degrade.
+    var pacer = DrawPacer()
+    var t = 0.0
+    for _ in 0..<60 {
+        t += budget
+        expect(pacer.shouldDraw(at: t, budget: budget), "pacer: healthy ticks always draw")
+    }
+    expect(!pacer.degraded, "pacer: healthy pacing never degrades")
+
+    // Sustained 4x-over-budget ticks -> degrade to every-second-tick draws.
+    t = 0
+    pacer = DrawPacer()
+    var sawSkip = false
+    for _ in 0..<40 {
+        t += budget * 4
+        if !pacer.shouldDraw(at: t, budget: budget) { sawSkip = true }
+    }
+    expect(sawSkip, "pacer: sustained over-budget ticks skip draws")
+    expect(pacer.degraded, "pacer: degrades under sustained contention")
+
+    // Contention ends (ticks back to budget): degraded mode alternates
+    // draw/skip at first, then 3 good draw deltas restore full rate, which
+    // then holds — regardless of the parity when recovery happened.
+    var recovered = false
+    var allDrewAfterRecovery = true
+    for _ in 0..<40 {
+        t += budget
+        let drew = pacer.shouldDraw(at: t, budget: budget)
+        if !pacer.degraded { recovered = true }
+        if recovered { allDrewAfterRecovery = allDrewAfterRecovery && drew }
+    }
+    expect(recovered, "pacer: recovers once contention stops")
+    expect(allDrewAfterRecovery, "pacer: stays full rate after recovery")
+
+    // A huge tick gap (idle stop / sleep) is a restart, not contention:
+    // the EMA resets so no false degrade follows.
+    pacer = DrawPacer()
+    t = 0
+    for _ in 0..<30 {
+        t += budget * 4
+        _ = pacer.shouldDraw(at: t, budget: budget)
+    }
+    expect(pacer.degraded, "pacer: degraded before the restart gap")
+    t += 1.0
+    _ = pacer.shouldDraw(at: t, budget: budget)
+    t += budget
+    _ = pacer.shouldDraw(at: t, budget: budget)
+    expect(abs(pacer.ema - budget) < 1e-9, "pacer: EMA reset by the restart gap")
+}
+
 // MARK: - ScreenGeometry routing (multi-display)
 
 func testScreenGeometryRouting() {
@@ -419,6 +474,7 @@ testL10n()
 testSettingsStore()
 testVersionCompare()
 testProxyURLs()
+testDrawPacer()
 testScreenGeometryRouting()
 testSingleInstanceLock()
 testUpToDateLabel()
