@@ -60,6 +60,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// GPU) ticks slow down and the trail head would lag the cursor — this
     /// skips every second DRAW while sampling stays full-rate.
     private var drawPacer = DrawPacer()
+    /// Last renderTick timestamp — the stall watchdog judges by this, NOT by
+    /// lastDrawTime: skipped draws are intentional, a silent tick loop is not.
+    private var lastRenderTickTime: TimeInterval = 0
+    // Diagnostic HUD counters (BA_SHOW_HUD=1): cumulative, rates derived per
+    // housekeeping update.
+    private var hudTicks = 0
+    private var hudDraws = 0
+    private var hudPacerSkips = 0
+    private var hudInFlightSkips = 0
+    private var hudEmptySkips = 0
+    private var lastHUDUpdate: TimeInterval = 0
+    private struct HUDCounters {
+        var ticks = 0
+        var draws = 0
+        var pacerSkips = 0
+        var inFlightSkips = 0
+        var emptySkips = 0
+    }
+    private var lastHUDCounters = HUDCounters()
     private var settingsPanel: SettingsPanelController?
     /// Current render timer interval; follows the effect refresh rate.
     private var currentRenderInterval: TimeInterval = 1.0 / 60.0
@@ -390,29 +409,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// main runloop was blocked (Space animation, Mission Control, etc.). If
     /// the timer is running but no draw callback has fired for >0.5s, force
     /// one frame immediately and reassert the layer.
+    /// Watchdog: draws are non-blocking and skipped intentionally (pacer,
+    /// in-flight, empty display), so a stale lastDrawTime is NOT a stall —
+    /// treating it as one used to force a full-pipeline redraw of EVERY
+    /// display every 0.5s (including empty ones), which was itself a major
+    /// freeze source under GPU contention. The only real stall is the tick
+    /// loop going silent (dead display link), detected via renderTick's
+    /// timestamp.
     private func checkStall() {
         guard !overlays.isEmpty else { return }
-        // If we intentionally stopped rendering for a fullscreen app, that's
-        // not a stall — don't wake it up to burn GPU behind the fullscreen app.
         if fullscreenHidden { return }
-        // If we intentionally stopped rendering while idle (see
-        // startRenderTimer), that's not a stall either.
         guard renderDisplayLink != nil else { return }
         let now = CACurrentMediaTime()
-        let stalled = overlays.contains { overlay in
-            overlay.renderer.lastDrawTime == 0 || now - overlay.renderer.lastDrawTime > Self.stallThreshold
-        }
-        if stalled {
-            // The driver may have stalled (e.g. display link after a Space
-            // switch): rebuild it and force a frame now.
-            stopRenderTimer()
-            startRenderTimer()
-            overlays.forEach {
+        guard now - lastRenderTickTime > Self.stallThreshold else { return }
+        // The display link stopped delivering: rebuild it and force a frame.
+        stopRenderTimer()
+        startRenderTimer()
+        overlays.forEach {
+            if $0.renderer.particleSystem.hasActiveParticles(),
+               !$0.renderer.isFrameInFlight {
                 $0.view.draw()
-                $0.window.orderFrontRegardless()
             }
-            reapplyTransparency()
         }
+        overlays.forEach { $0.window.orderFrontRegardless() }
+        reapplyTransparency()
     }
 
     /// Effects availability: the master switch AND, when the battery-saver
@@ -466,6 +486,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func renderTick() {
         guard !overlays.isEmpty else { return }
         let now = CACurrentMediaTime()
+        lastRenderTickTime = now
+        hudTicks += 1
         let drawNow = drawPacer.shouldDraw(at: now, budget: currentRenderInterval)
         if effectsAllowed {
             // Bit 0 = left, bit 1 = right, bit 2 = middle (button 3). Any held
@@ -487,12 +509,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `currentDrawable` would freeze the main thread (and sampling) for
         // up to ~1s under GPU contention.
         if drawNow {
-            overlays.forEach { overlay in
-                if overlay.renderer.particleSystem.hasActiveParticles(),
-                   !overlay.renderer.isFrameInFlight {
-                    overlay.view.draw()
+            for overlay in overlays {
+                guard overlay.renderer.particleSystem.hasActiveParticles() else {
+                    hudEmptySkips += 1
+                    continue
                 }
+                guard !overlay.renderer.isFrameInFlight else {
+                    hudInFlightSkips += 1
+                    continue
+                }
+                overlay.view.draw()
+                hudDraws += 1
             }
+        } else {
+            hudPacerSkips += 1
         }
         // Nothing left on any screen -> stop until the next interaction.
         if !overlays.contains(where: { $0.renderer.particleSystem.hasActiveParticles() }) {
@@ -573,22 +603,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateStatus() {
-        guard let renderer, let label = statusLabel else { return }
-        let s = renderer.settings
+        guard let label = statusLabel else { return }
+        let now = CACurrentMediaTime()
+        let elapsed = max(0.001, now - lastHUDUpdate)
+        let prev = lastHUDCounters
+        func rate(_ current: Int, _ previous: Int) -> Int {
+            max(0, Int(Double(current - previous) / elapsed))
+        }
+        defer {
+            lastHUDUpdate = now
+            lastHUDCounters = HUDCounters(
+                ticks: hudTicks, draws: hudDraws, pacerSkips: hudPacerSkips,
+                inFlightSkips: hudInFlightSkips, emptySkips: hudEmptySkips
+            )
+        }
+
+        var sampleAgeText = "n/a"
+        if let renderer, let age = renderer.particleSystem.newestTrailPointAge(now: now) {
+            sampleAgeText = String(format: "%.0f", age * 1000)
+        }
+        let bloomState = renderer.map { $0.bloomEnabled ? "ON" : "OFF" } ?? "?"
         label.stringValue = String(
-            format: "bloom=%@ I=%.2f(->%.3f) boost=%.1f levels=%d scale=%.3f diff=%.1f th=%.2f falloff=%.1f bursts=%d shards=%d trail=%d",
-            renderer.bloomEnabled ? "ON" : "OFF",
-            s.bloomStrength,
-            renderer.debugBloomIntensityFactor,
-            s.bloomBoost,
-            renderer.debugBloomLevels,
-            renderer.debugBloomSampleScale,
-            s.bloomDiffusion,
-            s.bloomThreshold,
-            s.bloomFalloff,
-            renderer.particleSystem.bursts.count,
-            renderer.particleSystem.shards.count,
-            renderer.particleSystem.trail.count
+            format: "tick=%d/s draw=%d/s skip(pacer=%d inflight=%d empty=%d) deg=%d sampleAge=%@ms | bloom=%@ trail=%d",
+            rate(hudTicks, prev.ticks),
+            rate(hudDraws, prev.draws),
+            rate(hudPacerSkips, prev.pacerSkips),
+            rate(hudInFlightSkips, prev.inFlightSkips),
+            rate(hudEmptySkips, prev.emptySkips),
+            drawPacer.degraded ? 1 : 0,
+            sampleAgeText,
+            bloomState,
+            renderer?.particleSystem.trail.count ?? 0
         )
     }
 
