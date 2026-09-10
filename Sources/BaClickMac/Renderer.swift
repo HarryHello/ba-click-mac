@@ -65,6 +65,15 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// Timestamp (CACurrentMediaTime) of the last successful draw callback.
     /// AppDelegate's watchdog uses this to detect a stalled display link.
     private(set) var lastDrawTime: TimeInterval = 0
+    /// True while the previous frame's command buffer is still executing on
+    /// the GPU. Starting another frame then risks blocking the main thread in
+    /// `view.currentDrawable` (CAMetalLayer waits up to ~1s for a free
+    /// drawable when the pool is exhausted) — which freezes sampling and lets
+    /// the trail head lag the cursor. Callers skip the frame instead.
+    ///
+    /// Written from Metal's completion queue, read from the main thread; a
+    /// word-sized Bool store is effectively atomic on our targets.
+    private(set) var isFrameInFlight = false
 
     private let circleTexture: MTLTexture
     private let ringTexture: MTLTexture
@@ -369,6 +378,10 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         encoder.endEncoding()
 
+        isFrameInFlight = true
+        commandBuffer.addCompletedHandler { [weak self] _ in
+            self?.isFrameInFlight = false
+        }
         commandBuffer.present(drawable)
         commandBuffer.commit()
     }

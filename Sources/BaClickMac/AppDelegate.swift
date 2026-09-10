@@ -481,10 +481,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         // Skipped draws only delay the repaint; the accumulated trail points
-        // are all rendered on the next draw, so nothing is lost.
+        // are all rendered on the next draw, so nothing is lost. Per-display:
+        // empty displays skip their whole pipeline. And a display whose
+        // previous frame is still executing is skipped too — waiting in
+        // `currentDrawable` would freeze the main thread (and sampling) for
+        // up to ~1s under GPU contention.
         if drawNow {
             overlays.forEach { overlay in
-                if overlay.renderer.particleSystem.hasActiveParticles() {
+                if overlay.renderer.particleSystem.hasActiveParticles(),
+                   !overlay.renderer.isFrameInFlight {
                     overlay.view.draw()
                 }
             }

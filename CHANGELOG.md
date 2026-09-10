@@ -7,6 +7,7 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 ## [Unreleased]
 
 ### 优化 / Performance
+- **绘制不再阻塞采样（关键修复）**：`view.currentDrawable` 在 GPU 饱和、可绘制缓冲耗尽时会阻塞主线程最长约 1 秒（CAMetalLayer 等待上限），期间采样完全冻结——这正是"轨迹延迟半秒到一秒"的根源。现在渲染器跟踪在途帧，上一帧未完成就直接跳帧，主线程永不被冻结：GPU 忙不过来的代价从"轨迹冻结"变成"丢帧"。
 - **自适应隔帧绘制**（DrawPacer）：GPU 被其他应用挤占、tick 实测持续超预算时，自动降为隔帧绘制（**采样永远全频**，轨迹头部持续贴合光标），负载恢复后自动回全速。降级/恢复阈值分离 + EMA 平滑，不会在临界点抖动。
 
 ### Fixed / 修复
