@@ -18,7 +18,7 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 - **菜单栏快捷开关**：菜单栏图标菜单新增「启用/停用特效」，不打开面板即可一键切换，标签随状态自动更新。
 
 ### 优化 / Performance
-- **DMG 安装窗口排版**：构建时通过 Finder 排版安装镜像——640×360 窗口、128px 大图标、应用与 Applications 居中并排（成熟发行版样式）。首次构建需允许"终端控制 Finder"，拒绝时回退默认布局。
+- **DMG 安装窗口排版**：构建时通过 Finder 排版安装镜像——640×360 窗口、128px 大图标、应用与 Applications 居中并排（成熟发行版样式），并使用 room_night 背景图（已压缩为 1280×720 JPEG，仅增重约 0.4MB）。首次构建需允许“终端控制 Finder”，拒绝时回退默认布局。
 - **降级只作用于辉光，核心特效永远原生分辨率**：GPU 压力下（画面陈旧度 EMA 持续超 100ms 或 pacer 降级），bloom/场景纹理从原生的 0.5× 降到 0.25×——纯模糊内容的分辨率减半不可感知；而尾迹/圆盘/弧光/碎片直接绘制在原生分辨率 drawable 上，本身永不降分辨率（此前整体降 drawable 正是锯齿的来源）。判定、backing scale、每 tick 校验等修正保留。
 
 ## [0.3.1] - 2026-09-11
