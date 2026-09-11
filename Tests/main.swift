@@ -92,6 +92,21 @@ func testParticleSystem() {
     expect(!ps3.hasActiveParticles(), "inactive after clear")
 }
 
+// MARK: - SettingsStore reset to defaults
+
+func testSettingsResetToDefaults() {
+    let store = SettingsStore()
+    store.model.trailScale = 4.0
+    store.model.refreshRate = 240
+    store.model.enabled = false
+    store.model.powerConnectedOnly = true
+    store.resetToDefaults()
+    expect(store.model.trailScale == 2.2, "reset: trailScale back to default")
+    expect(store.model.refreshRate == 60, "reset: refreshRate back to default")
+    expect(store.model.enabled == true, "reset: enabled back to default")
+    expect(store.model.powerConnectedOnly == false, "reset: powerConnectedOnly back to default")
+}
+
 // MARK: - Trail anchor staleness (cross-display shard storm)
 
 func testTrailAnchorStale() {
@@ -472,6 +487,7 @@ testTrailAnchorStale()
 testFXSettings()
 testL10n()
 testSettingsStore()
+testSettingsResetToDefaults()
 testVersionCompare()
 testProxyURLs()
 testDrawPacer()

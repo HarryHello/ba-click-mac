@@ -44,6 +44,12 @@ enum L10n {
         // Menu bar
         "openPanel": ("打开管理面板", "Open Management Panel"),
         "quit": ("退出 BA Click", "Quit BA Click"),
+        "disableEffects": ("停用特效", "Disable Effects"),
+
+        // Panel: reset to defaults
+        "resetToDefaults": ("恢复默认设置", "Reset to Defaults"),
+        "resetConfirm": ("确定要把全部特效参数恢复为默认值吗?", "Reset ALL effect settings to their defaults?"),
+        "cancel": ("取消", "Cancel"),
 
         // Updates + GitHub
         "checkForUpdates": ("检查更新", "Check for Updates"),

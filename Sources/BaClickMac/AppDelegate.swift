@@ -4,7 +4,7 @@ import QuartzCore
 import CoreGraphics
 import simd
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// One transparent overlay per attached display: window + renderer + the
     /// display frame its coordinates are local to. macOS does not reliably
     /// show one giant transparent window across every screen/Space
@@ -36,6 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickLoopTimer: Timer?
     /// Menu bar (status) item so the overlay can be quit without the Dock.
     private var statusItem: NSStatusItem?
+    /// Quick enable/disable item in the status menu; its label flips with
+    /// the master switch.
+    private var effectsMenuItem: NSMenuItem?
     /// Manual render loop driver: a vsync-synced CADisplayLink. We call
     /// MTKView.draw() ourselves so rendering never depends on the MTKView's
     /// own (fragile) display-link lifecycle.
@@ -690,6 +693,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = image
         }
         let menu = NSMenu()
+        // Quick toggle: flip the master switch without opening the panel.
+        let effectsItem = NSMenuItem(
+            title: store.model.enabled ? L10n.t("disableEffects") : L10n.t("enableEffects"),
+            action: #selector(toggleEffectsEnabled(_:)),
+            keyEquivalent: ""
+        )
+        effectsItem.target = self
+        menu.addItem(effectsItem)
+        effectsMenuItem = effectsItem
+        menu.addItem(.separator())
         // Static "open" item: the panel is closed via its own traffic-light
         // button, so the menu item never toggles its label.
         let openItem = NSMenuItem(
@@ -707,8 +720,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         quitItem.target = NSApp
         menu.addItem(quitItem)
+        // Refresh the toggle label every time the menu opens.
+        menu.delegate = self
         item.menu = menu
         statusItem = item
+    }
+
+    @objc private func toggleEffectsEnabled(_ sender: Any?) {
+        store.binding(\.enabled).wrappedValue.toggle()
+    }
+
+    /// Keep the quick-toggle label in sync with the current state.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        effectsMenuItem?.title = store.model.enabled
+            ? L10n.t("disableEffects")
+            : L10n.t("enableEffects")
     }
 
     @objc private func openPanel(_ sender: Any?) {

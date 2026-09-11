@@ -65,6 +65,13 @@ final class SettingsStore: ObservableObject {
         )
     }
 
+    /// Restore every persisted setting to its default. Launch-at-login is
+    /// system state and is deliberately not touched.
+    func resetToDefaults() {
+        model = FXSettings()
+        changed()
+    }
+
     private func changed() {
         DispatchQueue.main.async { [weak self] in
             self?.onChange?()

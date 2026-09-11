@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsPanelView: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject var updates: UpdateManager
+    @State private var confirmReset = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -89,8 +90,20 @@ struct SettingsPanelView: View {
             Divider()
 
             HStack {
+                Button(L10n.t("resetToDefaults")) { confirmReset = true }
+                    .controlSize(.small)
                 Spacer()
                 Button(L10n.t("quit")) { NSApp.terminate(nil) }
+            }
+            .confirmationDialog(
+                L10n.t("resetConfirm"),
+                isPresented: $confirmReset,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.t("resetToDefaults"), role: .destructive) {
+                    store.resetToDefaults()
+                }
+                Button(L10n.t("cancel"), role: .cancel) {}
             }
         }
         .padding(.horizontal, 16)
