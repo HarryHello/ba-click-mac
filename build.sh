@@ -149,6 +149,8 @@ case "$MODE" in
       MOUNT_DIR=$(hdiutil attach "$STAGE_DMG" -nobrowse | sed -n 's/^.*\(\/Volumes\/.*\)$/\1/p' | head -1)
       cp -R "$APP" "$MOUNT_DIR/"
       ln -s /Applications "$MOUNT_DIR/Applications"
+      mkdir -p "$MOUNT_DIR/.background"
+      cp Resources/dmg-background.jpg "$MOUNT_DIR/.background/background.jpg"
       # Finder needs a beat to register the freshly attached volume; a stale
       # /Volumes entry also mounts it as "BA Click 1", so pass the ACTUAL
       # volume name to the AppleScript.
@@ -166,8 +168,9 @@ tell application "Finder"
 		set viewOptions to icon view options of container window
 		set arrangement of viewOptions to not arranged
 		set icon size of viewOptions to 128
-		set position of item "BA Click.app" of container window to {180, 205}
-		set position of item "Applications" of container window to {460, 205}
+		set background picture of viewOptions to file ".background:background.jpg"
+		set position of item "BA Click.app" of container window to {170, 165}
+		set position of item "Applications" of container window to {470, 165}
 		close
 		open
 		update
