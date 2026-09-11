@@ -169,8 +169,8 @@ tell application "Finder"
 		set arrangement of viewOptions to not arranged
 		set icon size of viewOptions to 128
 		set background picture of viewOptions to file ".background:background.jpg"
-		set position of item "BA Click.app" of container window to {170, 165}
-		set position of item "Applications" of container window to {470, 165}
+		set position of item "BA Click.app" of container window to {126, 105}
+		set position of item "Applications" of container window to {386, 105}
 		close
 		open
 		update
