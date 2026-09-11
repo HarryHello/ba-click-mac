@@ -132,7 +132,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         L10n.language = L10n.Language(rawValue: store.model.language) ?? .system
         store.onChange = { [weak self] in
             guard let self else { return }
-            L10n.language = L10n.Language(rawValue: self.store.model.language) ?? .system
             self.applyCurrentSettings()
         }
 

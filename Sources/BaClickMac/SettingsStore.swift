@@ -81,6 +81,10 @@ final class SettingsStore: ObservableObject {
     }
 
     private func changed() {
+        // Sync the L10n override SYNCHRONOUSLY: SwiftUI re-renders the panel
+        // before the async onChange fires, and an out-of-sync L10n made the
+        // language picker render the PREVIOUS selection.
+        L10n.language = L10n.Language(rawValue: model.language) ?? .system
         DispatchQueue.main.async { [weak self] in
             self?.onChange?()
         }

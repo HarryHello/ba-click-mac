@@ -138,17 +138,47 @@ case "$MODE" in
       codesign ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} --force --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/BaClickMac"
       codesign ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} --force --sign "$SIGN_IDENTITY" "$APP"
       codesign --verify --strict --verbose=2 "$APP" >/dev/null
-      DMGSTAGE="$RELEASE/dmg-$ARCH"
-      mkdir -p "$DMGSTAGE"
-      cp -R "$APP" "$DMGSTAGE/"
-      ln -s /Applications "$DMGSTAGE/Applications"
-      echo "💿 Building $ARCH DMG..."
-      hdiutil create \
-        -volname "BA Click" \
-        -srcfolder "$DMGSTAGE" \
-        -ov -format UDZO \
-        "$RELEASE/BA-Click-$VERSION-$ARCH.dmg" >/dev/null
-      rm -rf "$DMGSTAGE"
+      # Polished installer DMG: stage a read-write image, lay out its window
+      # via Finder (640x360, 128px icons, app + Applications centered side by
+      # side), then compress. Requires Finder automation permission; when
+      # denied the DMG still builds with the default window layout.
+      echo "💿 Building $ARCH DMG (large centered icons)..."
+      STAGE_DMG="$RELEASE/dmg-stage-$ARCH.dmg"
+      rm -f "$STAGE_DMG"
+      hdiutil create -ov -volname "BA Click" -size 96m -fs "HFS+J" "$STAGE_DMG" >/dev/null
+      MOUNT_DIR=$(hdiutil attach "$STAGE_DMG" -nobrowse | sed -n 's/^.*\(\/Volumes\/.*\)$/\1/p' | head -1)
+      cp -R "$APP" "$MOUNT_DIR/"
+      ln -s /Applications "$MOUNT_DIR/Applications"
+
+      if osascript <<'APPLESCRIPT' >/dev/null 2>&1; then
+tell application "Finder"
+	tell disk "BA Click"
+		open
+		set current view of container window to icon view
+		set toolbar visible of container window to false
+		set statusbar visible of container window to false
+		set bounds of container window to {240, 160, 880, 520}
+		set viewOptions to icon view options of container window
+		set arrangement of viewOptions to not arranged
+		set icon size of viewOptions to 128
+		set position of item "BA Click.app" of container window to {180, 205}
+		set position of item "Applications" of container window to {460, 205}
+		close
+		open
+		update
+	end tell
+end tell
+APPLESCRIPT
+        sleep 3
+        sync
+      else
+        echo "⚠️  Finder automation unavailable — DMG keeps the default window layout" >&2
+        sleep 1
+      fi
+
+      hdiutil detach "$MOUNT_DIR" >/dev/null
+      hdiutil convert "$STAGE_DMG" -format UDZO -o "$RELEASE/BA-Click-$VERSION-$ARCH.dmg" >/dev/null
+      rm -f "$STAGE_DMG"
     done
 
     if [ -n "$TMP_KEYCHAIN" ]; then
