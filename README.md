@@ -46,11 +46,13 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 - ✅ Multi-monitor overlays, one per attached display / 多显示器覆盖层（每个显示器一个）
 
 > **App icon / 应用图标**: authored in the modern **Icon Composer** (macOS 26+ / Xcode 26) as `icons/icon.icon` (an `icon.json` manifest + layered `Assets/*.svg`). The format is **full-bleed** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing in Icon Composer, regenerate with `./tools/build-icon.sh` (renders via the bundled `ictool` CLI, produces `Resources/icon.png` + `Resources/AppIcon.icns`). Requires `/Applications/Icon Composer.app`.
+>
 > 应用图标：用新版 **Icon Composer**（macOS 26+ / Xcode 26）制作，源文件为 `icons/icon.icon`（`icon.json` 清单 + 分层 `Assets/*.svg`）。该格式是**满幅**的——macOS 会在 Dock/Launchpad 自动套上自家的 squircle mask（连续曲线，不是普通圆角，且随系统版本不同），所以**不要**在素材里自己烘焙圆角或边距。在 Icon Composer 里改完用 `./tools/build-icon.sh` 重新生成（内部调用自带的 `ictool` CLI）。需要装有 `/Applications/Icon Composer.app`。
 >
 > **Menu bar icon / 菜单栏图标**: rendered at 22 pt from `icons/bar_icon.svg`. After editing the SVG, regenerate with
 > `./tools/svg2png.sh icons/bar_icon.svg Resources/bar_icon_22.png 22` and
 > `./tools/svg2png.sh icons/bar_icon.svg Resources/bar_icon_44.png 44`.
+>
 > 菜单栏图标以 22pt 渲染，源文件为 `icons/bar_icon.svg`。改完 SVG 后用上面的命令重新生成 PNG。
 
 ## Requirements / 环境要求
@@ -133,6 +135,7 @@ The app loads `settings.json` from the **current working directory**, the **exec
 > **解析规则**：`settings.json` 可以**只写你要改的键**——缺失的键沿用默认值。未知键会在 stderr 打印告警（忽略）；JSON 非法会打印告警并回退默认值。这是刻意设计：部分修改不会悄悄丢掉其它设置。
 >
 > `settings.json` is **git-ignored** (personal tuning stays local); commit changes to `settings.example.json` instead.
+>
 > `settings.json` 已被 **git 忽略**（个人调参留在本地）；如需提交参数，请改 `settings.example.json`。
 
 ## Adding a setting / 新增一个设置项
