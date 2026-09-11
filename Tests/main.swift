@@ -100,11 +100,13 @@ func testSettingsResetToDefaults() {
     store.model.refreshRate = 240
     store.model.enabled = false
     store.model.powerConnectedOnly = true
+    store.model.clickCount = 42
     store.resetToDefaults()
     expect(store.model.trailScale == 2.2, "reset: trailScale back to default")
     expect(store.model.refreshRate == 60, "reset: refreshRate back to default")
     expect(store.model.enabled == true, "reset: enabled back to default")
     expect(store.model.powerConnectedOnly == false, "reset: powerConnectedOnly back to default")
+    expect(store.model.clickCount == 42, "reset: statistics survive the reset")
 }
 
 // MARK: - Trail anchor staleness (cross-display shard storm)

@@ -73,10 +73,12 @@ final class SettingsStore: ObservableObject {
         changed()
     }
 
-    /// Restore every persisted setting to its default. Launch-at-login is
-    /// system state and is deliberately not touched.
+    /// Restore every persisted SETTING to its default. Launch-at-login is
+    /// system state and the click counter is statistics — neither is touched.
     func resetToDefaults() {
+        let preservedCount = model.clickCount
         model = FXSettings()
+        model.clickCount = preservedCount
         changed()
     }
 
