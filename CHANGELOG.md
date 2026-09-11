@@ -4,7 +4,7 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 
 ---
 
-## [Unreleased]
+## [0.3.2] - 2026-09-12
 
 ### Fixed / 修复
 - **语言切换慢一拍**：语言设置此前经由异步 onChange 同步到 L10n，SwiftUI 重渲染早于同步完成——面板总是渲染成上一次选择的语言。现在写入设置时同步切换 L10n。
