@@ -488,12 +488,15 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         // Separate glow source intensity for click vs trail: the HDR scene
         // brightness controls how strongly each contributes to bloom.
-        // settings.clickBrightness uniformly scales the whole click effect.
-        var diskEmission = BAEffect.disk.emission * (sceneTarget ? settings.clickBloomStrength : 1.0) * settings.clickBrightness
+        // settings.clickBrightness scales the whole click effect, but the
+        // VISIBLE pass never drops below 1.0 — below that only the glow
+        // fades, otherwise 0 would paint the sprites BLACK (color x 0 with
+        // alpha intact) instead of the plain blue "glow off" look.
+        var diskEmission = BAEffect.disk.emission * (sceneTarget ? settings.clickBloomStrength : 1.0) * max(settings.clickBrightness, 1.0)
         encoder.setFragmentBytes(&diskEmission, length: MemoryLayout<Float>.size, index: 2)
         drawTextured(vertices: disk, texture: circleTexture, pipeline: diskPipeline, encoder: encoder)
 
-        var ringEmission = BAEffect.rings.hdrIntensity * (sceneTarget ? settings.clickBloomStrength : 1.0) * settings.clickBrightness
+        var ringEmission = BAEffect.rings.hdrIntensity * (sceneTarget ? settings.clickBloomStrength : 1.0) * max(settings.clickBrightness, 1.0)
         encoder.setFragmentBytes(&ringEmission, length: MemoryLayout<Float>.size, index: 2)
         drawRing(vertices: ring, texture: ringTexture, pipeline: ringPipeline, encoder: encoder)
 
@@ -575,7 +578,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
             let size = shard.size * BAEval.hermite(BAEffect.shards.sizeKeys, progress)
             let color = BAEval.color(BAEffect.shards.colorKeys, progress)
-            let material = Renderer.linearEnergy(color, intensity: BAEffect.shards.hdrIntensity) * BAEffect.shards.startColor * settings.clickBrightness
+            let material = Renderer.linearEnergy(color, intensity: BAEffect.shards.hdrIntensity) * BAEffect.shards.startColor * max(settings.clickBrightness, 1.0)
             // Original FX_TEX_Triangle_02_1 is a 2x1 atlas: left frame is the
             // base triangle, right frame is its vertical flip.
             let frame = shard.textureFrame % 2

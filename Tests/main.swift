@@ -196,6 +196,26 @@ func testVersionCompare() {
     expect(UpdateManager.normalizeVersion("0.2.2-beta1") == [0, 2, 2], "normalize: core keeps suffix-segment")
 }
 
+// MARK: - L10n Japanese + language override
+
+func testL10nJapanese() {
+    // Every zh/en key must have a Japanese translation.
+    for (key, pair) in L10n.strings {
+        let ja = L10n.ja[key]
+        expect(ja != nil, "L10n ja key exists: \(key)")
+        expect(!(ja ?? "").isEmpty, "L10n ja non-empty: \(key)")
+        expect(ja != pair.en, "L10n ja differs from en: \(key)")
+    }
+    // Explicit overrides dispatch correctly (system default untouched).
+    L10n.language = .ja
+    expect(L10n.t("quit").hasSuffix("終了"), "L10n: ja override resolves")
+    L10n.language = .en
+    expect(L10n.t("quit") == "Quit BA Click", "L10n: en override resolves")
+    L10n.language = .zh
+    expect(L10n.t("quit") == "退出 BA Click", "L10n: zh override resolves")
+    L10n.language = .system
+}
+
 // MARK: - GitHub proxy URL construction (pure)
 
 func testProxyURLs() {
@@ -472,6 +492,21 @@ func testFXSettings() {
         "new toggles round-trip through encode/decode"
     )
 
+    // 0.3.2: language + click statistics fields.
+    let fragment2 = Data(#"{"language": "ja", "clickCountEnabled": true, "clickCount": 42}"#.utf8)
+    let decoded2 = try! JSONDecoder().decode(FXSettings.self, from: fragment2)
+    expect(decoded2.language == "ja", "language decodes")
+    expect(decoded2.clickCountEnabled == true, "clickCountEnabled decodes")
+    expect(decoded2.clickCount == 42, "clickCount decodes")
+    let roundtrip2 = try! JSONDecoder().decode(
+        FXSettings.self,
+        from: try! JSONEncoder().encode(decoded2)
+    )
+    expect(
+        roundtrip2.language == "ja" && roundtrip2.clickCount == 42,
+        "language + click count round-trip"
+    )
+
     // persistURL prefers an existing cwd settings.json. (Build the expected URL
     // the same way persistURL does — the cwd is /private/var/... while the
     // temp dir URL is /var/..., so a direct string comparison would differ.)
@@ -486,6 +521,7 @@ testParticleSystem()
 testTrailAnchorStale()
 testFXSettings()
 testL10n()
+testL10nJapanese()
 testSettingsStore()
 testSettingsResetToDefaults()
 testVersionCompare()

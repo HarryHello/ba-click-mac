@@ -65,6 +65,14 @@ final class SettingsStore: ObservableObject {
         )
     }
 
+    /// Count one click effect (no-op unless the statistics toggle is on);
+    /// persisted with the usual debounced write.
+    func registerClick() {
+        guard model.clickCountEnabled else { return }
+        model.clickCount += 1
+        changed()
+    }
+
     /// Restore every persisted setting to its default. Launch-at-login is
     /// system state and is deliberately not touched.
     func resetToDefaults() {

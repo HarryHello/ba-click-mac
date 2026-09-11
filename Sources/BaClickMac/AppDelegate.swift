@@ -129,8 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // restarts it at the new refresh rate.
         settingsPanel = SettingsPanelController(store: store, updateManager: updateManager)
         currentRenderInterval = 1.0 / Double(max(1, store.model.refreshRate))
+        L10n.language = L10n.Language(rawValue: store.model.language) ?? .system
         store.onChange = { [weak self] in
             guard let self else { return }
+            L10n.language = L10n.Language(rawValue: self.store.model.language) ?? .system
             self.applyCurrentSettings()
         }
 
@@ -353,6 +355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Feed a click (global point) to the overlay that owns that display.
     private func addClick(at globalPoint: NSPoint) {
+        store.registerClick()
         guard let routed = overlay(containing: globalPoint) else { return }
         routed.overlay.renderer.particleSystem.addClick(at: routed.localPoint)
     }

@@ -9,6 +9,19 @@ struct SettingsPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(L10n.t("language"))
+                Spacer()
+                Picker(L10n.t("language"), selection: store.binding(\.language)) {
+                    Text("自动 / Auto").tag("auto")
+                    Text("中文").tag("zh")
+                    Text("English").tag("en")
+                    Text("日本語").tag("ja")
+                }
+                .labelsHidden()
+                .frame(width: 120)
+            }
+
             Toggle(L10n.t("enableEffects"), isOn: store.binding(\.enabled))
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -53,6 +66,15 @@ struct SettingsPanelView: View {
                 .labelsHidden()
                 .frame(width: 90)
             }
+
+            Divider()
+
+            Toggle(L10n.t("clickCountEnabled"), isOn: store.binding(\.clickCountEnabled))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            Text(String(format: L10n.t("clickCountLabel"), store.model.clickCount))
+                .font(.caption)
+                .foregroundColor(.secondary)
 
             Divider()
 
