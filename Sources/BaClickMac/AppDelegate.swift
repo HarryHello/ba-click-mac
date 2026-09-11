@@ -83,6 +83,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     private var lastHUDCounters = HUDCounters()
     private var lastOverlayDrawTime: TimeInterval = 0
+    /// True while any drawable still shows content that the simulation has
+    /// already dropped (effects disabled/cleared, particles expired during
+    /// skipped ticks): one final blank repaint is required, or the last
+    /// painted frame — with the particles still visible — lingers forever,
+    /// because the empty-display skip would skip exactly that erase.
+    private var screenDirty = false
     /// Bloom-resolution degradation: when the VISIBLE frame goes stale (EMA of
     /// time-since-last-draw sustained over 100ms, or the pacer degraded) the
     /// bloom/scene textures drop from 0.5x to 0.25x native — glow only. The
@@ -526,6 +532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // previous frame is still executing is skipped too — waiting in
         // `currentDrawable` would freeze the main thread (and sampling) for
         // up to ~1s under GPU contention.
+        var drewContent = false
         if drawNow {
             for overlay in overlays {
                 guard overlay.renderer.particleSystem.hasActiveParticles() else {
@@ -539,9 +546,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 overlay.view.draw()
                 lastOverlayDrawTime = now
                 hudDraws += 1
+                drewContent = true
             }
         } else {
             hudPacerSkips += 1
+        }
+
+        // When content just vanished (effects disabled, expired during
+        // skipped ticks), paint one final blank frame — otherwise the last
+        // frame with the particles would linger on the drawable forever.
+        if drewContent {
+            screenDirty = true
+        } else if screenDirty {
+            var clearedAll = true
+            for overlay in overlays {
+                if overlay.renderer.isFrameInFlight {
+                    clearedAll = false
+                    continue
+                }
+                overlay.view.draw()
+                hudDraws += 1
+            }
+            if clearedAll { screenDirty = false }
         }
 
         // Render-scale pressure: sustained visible staleness (>100ms EMA) or
