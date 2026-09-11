@@ -80,19 +80,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var lastHUDCounters = HUDCounters()
     private var lastOverlayDrawTime: TimeInterval = 0
-    /// Render-scale degradation: when the VISIBLE frame goes stale (EMA of
-    /// time-since-last-draw sustained over 100ms, or the pacer degraded)
-    /// overlays render at half resolution — pixel cost falls 4x so frames
-    /// complete sooner and the draw rate recovers. Glow content tolerates the
-    /// upscale; full resolution returns as soon as staleness decays.
-    ///
-    /// The expected drawable size is frame × backingScaleFactor × scale and
-    /// is enforced EVERY tick: an overlay that was mid-flight during a
-    /// transition would otherwise keep a stale scale forever (this showed as
-    /// one display crisp while the other pixelated). Backing scale matters —
-    /// a Retina display's native drawable is 2x its point size, and ignoring
-    /// that pixelated built-in displays while externals looked fine.
-    private var renderScale: CGFloat = 1.0
+    /// Bloom-resolution degradation: when the VISIBLE frame goes stale (EMA of
+    /// time-since-last-draw sustained over 100ms, or the pacer degraded) the
+    /// bloom/scene textures drop from 0.5x to 0.25x native — glow only. The
+    /// core particles are always drawn at full drawable resolution, so the
+    /// trail/click content itself never pixelates.
     private var drawStalenessEMA: Double = 0
     private var settingsPanel: SettingsPanelController?
     /// Current render timer interval; follows the effect refresh rate.
@@ -550,26 +542,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Render-scale pressure: sustained visible staleness (>100ms EMA) or
-        // a degraded pacer. The expected drawable size is re-enforced every
-        // tick; an overlay mid-flight during a transition catches up on the
-        // next tick instead of keeping a stale scale forever.
+        // a degraded pacer. Only the GLOW degrades — the bloom/scene
+        // textures drop from 0.5x to 0.25x native (a pure blur either way)
+        // while the core particles stay at full drawable resolution, so
+        // there is no pixelation on the trail/click content itself.
         let underPressure = drawPacer.degraded || drawStalenessEMA > 0.1
-        let targetScale: CGFloat = underPressure ? 0.5 : 1.0
-        renderScale = targetScale
-        for overlay in overlays {
-            let size = overlay.view.frame.size
-            let backing = overlay.view.window?.backingScaleFactor
-                ?? overlay.view.layer?.contentsScale
-                ?? 1
-            let expected = CGSize(
-                width: (size.width * backing * targetScale).rounded(),
-                height: (size.height * backing * targetScale).rounded()
-            )
-            let current = overlay.view.drawableSize
-            if abs(current.width - expected.width) > 1 || abs(current.height - expected.height) > 1 {
-                guard !overlay.renderer.isFrameInFlight else { continue }
-                overlay.view.drawableSize = expected
-            }
+        let targetBloomRes: CGFloat = underPressure ? 0.25 : 0.5
+        for overlay in overlays where overlay.renderer.bloomResolutionScale != targetBloomRes {
+            overlay.renderer.bloomResolutionScale = targetBloomRes
+            overlay.renderer.refreshBloomResolution()
         }
         // Nothing left on any screen -> stop until the next interaction.
         if !overlays.contains(where: { $0.renderer.particleSystem.hasActiveParticles() }) {
@@ -674,14 +655,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let bloomState = renderer.map { $0.bloomEnabled ? "ON" : "OFF" } ?? "?"
         label.stringValue = String(
-            format: "tick=%d/s draw=%d/s skip(pacer=%d inflight=%d empty=%d) deg=%d scale=%.2f drawAge=%@ms | bloom=%@ trail=%d",
+            format: "tick=%d/s draw=%d/s skip(pacer=%d inflight=%d empty=%d) deg=%d bloomRes=%.2f drawAge=%@ms | bloom=%@ trail=%d",
             rate(hudTicks, prev.ticks),
             rate(hudDraws, prev.draws),
             rate(hudPacerSkips, prev.pacerSkips),
             rate(hudInFlightSkips, prev.inFlightSkips),
             rate(hudEmptySkips, prev.emptySkips),
             drawPacer.degraded ? 1 : 0,
-            renderScale,
+            overlays.first?.renderer.bloomResolutionScale ?? 0.5,
             drawAgeText,
             bloomState,
             renderer?.particleSystem.trail.count ?? 0

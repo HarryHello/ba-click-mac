@@ -73,7 +73,23 @@ final class Renderer: NSObject, MTKViewDelegate {
     ///
     /// Written from Metal's completion queue, read from the main thread; a
     /// word-sized Bool store is effectively atomic on our targets.
+    /// True while the previous frame's command buffer is still executing on
+    /// the GPU. Starting another frame then risks blocking the main thread in
+    /// `view.currentDrawable` (CAMetalLayer waits up to ~1s for a free
+    /// drawable when the pool is exhausted) — which freezes sampling and lets
+    /// the trail head lag the cursor. Callers skip the frame instead.
+    ///
+    /// Written from Metal's completion queue, read from the main thread; a
+    /// word-sized Bool store is effectively atomic on our targets.
     private(set) var isFrameInFlight = false
+    /// Fraction of NATIVE pixels the bloom/scene textures render at. The
+    /// core particles are ALWAYS drawn at full drawable resolution (the
+    /// bloom-add pass takes its glow solely from the pyramid texture), so
+    /// this only ever softens the halo — the one thing that tolerates it.
+    /// Default 0.5 ("bloom is soft"); the app drops it to 0.25 under GPU
+    /// pressure. Changing it re-runs updateProjection via
+    /// `refreshBloomResolution()`.
+    var bloomResolutionScale: CGFloat = 0.5
 
     private let circleTexture: MTLTexture
     private let ringTexture: MTLTexture
@@ -246,6 +262,14 @@ final class Renderer: NSObject, MTKViewDelegate {
     // MARK: - MTKViewDelegate
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        updateProjection(view: view)
+    }
+
+    /// Re-evaluate bloom texture sizes after `bloomResolutionScale` changed.
+    /// Cheap no-op when the computed size is unchanged (updateProjection
+    /// early-returns on matching dimensions).
+    func refreshBloomResolution() {
+        guard let view = currentView else { return }
         updateProjection(view: view)
     }
 
@@ -833,9 +857,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         guard pixelSize.width > 0, pixelSize.height > 0 else { return }
 
-        // Bloom is soft, so render it at half resolution to cut memory/GPU cost.
-        let bloomWidth = max(1, Int(pixelSize.width * 0.5))
-        let bloomHeight = max(1, Int(pixelSize.height * 0.5))
+        // Bloom is soft, so render it at reduced resolution to cut memory/GPU
+        // cost (0.5x native normally, 0.25x under GPU pressure).
+        let bloomWidth = max(1, Int(pixelSize.width * bloomResolutionScale))
+        let bloomHeight = max(1, Int(pixelSize.height * bloomResolutionScale))
 
         // Original MXFinalBloom: iterations and sampleScale come from the
         // diffusion parameter and the starting (half-res) texture size.
