@@ -149,10 +149,15 @@ case "$MODE" in
       MOUNT_DIR=$(hdiutil attach "$STAGE_DMG" -nobrowse | sed -n 's/^.*\(\/Volumes\/.*\)$/\1/p' | head -1)
       cp -R "$APP" "$MOUNT_DIR/"
       ln -s /Applications "$MOUNT_DIR/Applications"
+      # Finder needs a beat to register the freshly attached volume; a stale
+      # /Volumes entry also mounts it as "BA Click 1", so pass the ACTUAL
+      # volume name to the AppleScript.
+      sleep 2
+      VOLNAME=$(basename "$MOUNT_DIR")
 
-      if osascript <<'APPLESCRIPT' >/dev/null 2>&1; then
+      if osascript <<APPLESCRIPT >/dev/null 2>&1; then
 tell application "Finder"
-	tell disk "BA Click"
+	tell disk "$VOLNAME"
 		open
 		set current view of container window to icon view
 		set toolbar visible of container window to false
