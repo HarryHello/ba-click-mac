@@ -495,18 +495,19 @@ func testFXSettings() {
     )
 
     // 0.3.2: language + click statistics fields.
-    let fragment2 = Data(#"{"language": "ja", "clickCountEnabled": true, "clickCount": 42}"#.utf8)
+    let fragment2 = Data(#"{"language": "ja", "clickCountEnabled": true, "clickCount": 42, "forceTopmost": true}"#.utf8)
     let decoded2 = try! JSONDecoder().decode(FXSettings.self, from: fragment2)
     expect(decoded2.language == "ja", "language decodes")
     expect(decoded2.clickCountEnabled == true, "clickCountEnabled decodes")
     expect(decoded2.clickCount == 42, "clickCount decodes")
+    expect(decoded2.forceTopmost == true, "forceTopmost decodes")
     let roundtrip2 = try! JSONDecoder().decode(
         FXSettings.self,
         from: try! JSONEncoder().encode(decoded2)
     )
     expect(
-        roundtrip2.language == "ja" && roundtrip2.clickCount == 42,
-        "language + click count round-trip"
+        roundtrip2.language == "ja" && roundtrip2.clickCount == 42 && roundtrip2.forceTopmost == true,
+        "language + click count + forceTopmost round-trip"
     )
 
     // persistURL prefers an existing cwd settings.json. (Build the expected URL

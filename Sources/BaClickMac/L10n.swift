@@ -97,6 +97,11 @@ enum L10n {
         "clickCountEnabled": ("点击统计", "Click Statistics"),
         "clickCountLabel": ("已点击 %d 次", "Clicked %d times"),
         "language": ("语言", "Language"),
+        "forceTopmost": ("强制置顶", "Force Topmost"),
+        "forceTopmostHelp": (
+            "使用系统私有接口将特效置于一切元素之上（Dock、菜单、启动器，甚至锁屏）；关闭时会短暂重建特效窗口",
+            "Uses a private system API to render the effects above EVERYTHING (Dock, menus, launchers, even the lock screen); toggling off briefly rebuilds the overlays"
+        ),
     ]
 
     /// Japanese strings; a key missing here falls back to English. Kept
@@ -141,6 +146,8 @@ enum L10n {
         "clickCountEnabled": "クリック統計",
         "clickCountLabel": "%d 回クリック",
         "language": "言語",
+        "forceTopmost": "強制最前面表示",
+        "forceTopmostHelp": "システムの非公開APIで、Dockやメニュー、ロック画面より前面にエフェクトを表示します。オフにするとウィンドウを一瞬再構築します",
     ]
 
     /// Localized string for `key` in the resolved language.

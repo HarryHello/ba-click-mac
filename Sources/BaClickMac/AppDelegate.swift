@@ -59,6 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let powerMonitor = PowerMonitor()
     /// Last known AC-power state (updated by `powerMonitor`).
     private var onACPower = PowerMonitor.isOnACPower
+    /// True while the overlay windows live in the force-topmost SkyLight
+    /// space; toggling OFF rebuilds them to return to normal Spaces.
+    private var topmostDelegated = false
     /// Adaptive draw pacing: under GPU contention (other apps squeezing the
     /// GPU) ticks slow down and the trail head would lag the cursor — this
     /// skips every second DRAW while sampling stays full-rate.
@@ -142,6 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.applyCurrentSettings()
         }
         powerMonitor.start()
+        applyTopmostState()
 
         // Auto update check shortly after launch (opt-out; throttled + silent).
         if store.model.autoUpdateCheck {
@@ -385,6 +389,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Keep one transparent overlay aligned with each attached display:
     /// resize in place when frames merely changed, rebuild when displays were
     /// added/removed.
+    /// Tear down and recreate one overlay per display. Also the way OUT of
+    /// force-topmost mode: destroyed windows leave the SkyLight space, the
+    /// fresh ones are normal-window-level again.
+    private func rebuildOverlays(device: MTLDevice) {
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return }
+        let label = statusLabel
+        overlays.forEach { $0.window.orderOut(nil) }
+        overlays = screens.compactMap { makeOverlay(device: device, screen: $0) }
+        guard let primaryOverlay = overlays.first else { return }
+        window = primaryOverlay.window
+        overlayView = primaryOverlay.view
+        renderer = primaryOverlay.renderer
+        if let label {
+            label.removeFromSuperview()
+            label.frame.origin.y = primaryOverlay.screenFrame.height - 50
+            primaryOverlay.view.addSubview(label)
+        }
+        applyTopmostState()
+        if !fullscreenHidden {
+            overlays.forEach { $0.window.orderFrontRegardless() }
+        }
+    }
+
     private func updateOverlayGeometry() {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return }
@@ -393,21 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             zip(frames, overlays.map(\.screenFrame)).contains { !$0.equalTo($1) }
 
         if needsRebuild, let device = overlays.first?.view.device ?? MTLCreateSystemDefaultDevice() {
-            let label = statusLabel
-            overlays.forEach { $0.window.orderOut(nil) }
-            overlays = screens.compactMap { makeOverlay(device: device, screen: $0) }
-            guard let primaryOverlay = overlays.first else { return }
-            window = primaryOverlay.window
-            overlayView = primaryOverlay.view
-            renderer = primaryOverlay.renderer
-            if let label {
-                label.removeFromSuperview()
-                label.frame.origin.y = primaryOverlay.screenFrame.height - 50
-                primaryOverlay.view.addSubview(label)
-            }
-            if !fullscreenHidden {
-                overlays.forEach { $0.window.orderFrontRegardless() }
-            }
+            rebuildOverlays(device: device)
             return
         }
 
@@ -464,8 +478,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func applyCurrentSettings() {
         applySettingsToRenderers()
         syncRenderTimer()
+        applyTopmostState()
         if !effectsAllowed {
             overlays.forEach { $0.renderer.particleSystem.clear() }
+        }
+    }
+
+    /// Force-topmost: delegate the overlay windows into the high-level
+    /// SkyLight space (above menus/Dock/launchers/lock screen). Turning it
+    /// OFF cannot un-delegate, so the overlays are rebuilt fresh — same path
+    /// as display changes, visible for a fraction of a second.
+    private func applyTopmostState() {
+        if store.model.forceTopmost {
+            guard SkyLightSpace.shared.available else { return }
+            if !topmostDelegated {
+                overlays.forEach { SkyLightSpace.shared.delegateWindow($0.window) }
+                topmostDelegated = true
+            }
+        } else if topmostDelegated {
+            topmostDelegated = false
+            if let device = overlays.first?.view.device ?? MTLCreateSystemDefaultDevice() {
+                rebuildOverlays(device: device)
+            }
         }
     }
 
@@ -618,12 +652,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if fullscreen {
             fullscreenHidden = true
             stopRenderTimer()
+            // alphaValue as well as orderOut: in force-topmost mode the
+            // windows live in a SkyLight space that may ignore ordering.
+            overlays.forEach { $0.window.alphaValue = 0 }
             overlays.forEach { $0.window.orderOut(nil) }
         } else {
             fullscreenHidden = false
             startRenderTimer()
             overlays.forEach {
-                $0.window.level = .floating
+                $0.window.alphaValue = 1
+                if !store.model.forceTopmost { $0.window.level = .floating }
                 $0.window.orderFrontRegardless()
             }
             reapplyTransparency()

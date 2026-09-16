@@ -32,6 +32,7 @@ struct FXSettings: Codable {
     static let defaultLanguage: String = "auto"
     static let defaultClickCountEnabled: Bool = false
     static let defaultClickCount: Int = 0
+    static let defaultForceTopmost: Bool = false
     static let defaultClickBrightness: Float = 1.0
     static let defaultClickDiskOpacity: Float = 1.0
     static let defaultTriangleOpacity: Float = 1.0
@@ -64,6 +65,9 @@ struct FXSettings: Codable {
     /// Count how many click effects fire (persisted total).
     var clickCountEnabled: Bool
     var clickCount: Int
+    /// Force-topmost: render above menus/Dock/launchers/lock screen via a
+    /// dedicated high-level SkyLight space (private API, opt-in).
+    var forceTopmost: Bool
     var clickBrightness: Float
     var clickDiskOpacity: Float
     var triangleOpacity: Float
@@ -92,6 +96,7 @@ struct FXSettings: Codable {
         language = Self.defaultLanguage
         clickCountEnabled = Self.defaultClickCountEnabled
         clickCount = Self.defaultClickCount
+        forceTopmost = Self.defaultForceTopmost
         clickBrightness = Self.defaultClickBrightness
         clickDiskOpacity = Self.defaultClickDiskOpacity
         triangleOpacity = Self.defaultTriangleOpacity
@@ -126,6 +131,7 @@ struct FXSettings: Codable {
         language = try c.decodeIfPresent(String.self, forKey: .language) ?? Self.defaultLanguage
         clickCountEnabled = try c.decodeIfPresent(Bool.self, forKey: .clickCountEnabled) ?? Self.defaultClickCountEnabled
         clickCount = try c.decodeIfPresent(Int.self, forKey: .clickCount) ?? Self.defaultClickCount
+        forceTopmost = try c.decodeIfPresent(Bool.self, forKey: .forceTopmost) ?? Self.defaultForceTopmost
         clickBrightness = try c.decodeIfPresent(Float.self, forKey: .clickBrightness) ?? Self.defaultClickBrightness
         clickDiskOpacity = try c.decodeIfPresent(Float.self, forKey: .clickDiskOpacity) ?? Self.defaultClickDiskOpacity
         triangleOpacity = try c.decodeIfPresent(Float.self, forKey: .triangleOpacity) ?? Self.defaultTriangleOpacity
@@ -140,7 +146,7 @@ struct FXSettings: Codable {
         case bloomStrength, bloomLevels, bloomDiffusion, bloomThreshold
         case bloomFalloff, bloomBoost
         case enabled, trailAlwaysVisible, powerConnectedOnly, autoUpdateCheck
-        case language, clickCountEnabled, clickCount
+        case language, clickCountEnabled, clickCount, forceTopmost
         case rightClickEnabled, middleClickEnabled
         case clickBrightness, clickDiskOpacity, triangleOpacity, refreshRate
     }

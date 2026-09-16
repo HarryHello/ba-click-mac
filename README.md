@@ -42,6 +42,7 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 - ✅ Update check + self-update (falls back to GitHub Releases) / 检查更新 + 自动更新（失败时跳转 Releases）
 - ✅ Optional auto update check (at launch + panel open, throttled & silent) / 可选的自动检测更新（启动 + 打开面板时，节流且静默）
 - ✅ Battery saver: run effects only when plugged in / 仅接通电源时启用（电池时自动暂停特效）
+- ✅ Force topmost (opt-in, private SkyLight API): renders above Dock/menus/launchers/even the lock screen / 强制置顶（可选，私有 SkyLight API）：显示在 Dock、菜单、启动器甚至锁屏之上
 - ✅ Launch at login / 开机自启
 - ✅ Multi-monitor overlays, one per attached display / 多显示器覆盖层（每个显示器一个）
 
