@@ -341,25 +341,25 @@ Global mouse observation via `NSEvent.addGlobalMonitorForEvents` is generally al
 
 ## Troubleshooting / 排障
 
-- **Effect appears randomly / 特效随机消失或时有时无**: this used to be the MTKView display link stalling after Space/fullscreen transitions — now fixed by the manual vsync render loop. If it ever looks dead again, the watchdog rebuilds a silent tick loop on its own; the HUD's `tick/s` / `drawAge` show whether it recovered.
+- **Effect appears randomly**: this used to be the MTKView display link stalling after Space/fullscreen transitions — now fixed by the manual vsync render loop. If it ever looks dead again, the watchdog rebuilds a silent tick loop on its own; the HUD's `tick/s` / `drawAge` show whether it recovered.
   
-  这曾是 MTKView display link 在 Space/全屏切换后停滞所致——现已通过手动 vsync 渲染循环修复。若再次看起来"死了"，看门狗会重建沉默的 tick 循环；HUD 的 `tick/s` 与 `drawAge` 能显示它是否恢复。
+  **特效随机消失或时有时无**：这曾是 MTKView display link 在 Space/全屏切换后停滞所致——现已通过手动 vsync 渲染循环修复。若再次看起来"死了"，看门狗会重建沉默的 tick 循环；HUD 的 `tick/s` 与 `drawAge` 能显示它是否恢复。
 
-- **App exits immediately with a `FATAL:` message / 启动即退出并打印 `FATAL:`**: Metal device / shader compile / texture load failed — run from a terminal to see the exact reason (resources must exist in `Resources/` with the expected sizes).
+- **App exits immediately with a `FATAL:` message**: Metal device / shader compile / texture load failed — run from a terminal to see the exact reason (resources must exist in `Resources/` with the expected sizes).
   
-  Metal 设备 / Shader 编译 / 纹理加载失败——请从终端运行查看具体原因（`Resources/` 下资源必须存在且尺寸匹配）。
+  **启动即退出并打印 `FATAL:`**：Metal 设备 / Shader 编译 / 纹理加载失败——请从终端运行查看具体原因（`Resources/` 下资源必须存在且尺寸匹配）。
 
-- **No click response at all / 点击完全无反应**: make sure the app is not frontmost (never `activate` it); the global mouse monitor only receives events while another app is active.
+- **No click response at all**: make sure the app is not frontmost (never `activate` it); the global mouse monitor only receives events while another app is active.
   
-  请确认应用不是前台（绝不 `activate`）；全局鼠标监听只在其他应用为前台时才能收到事件。
+  **点击完全无反应**：请确认应用不是前台（绝不 `activate`）；全局鼠标监听只在其他应用为前台时才能收到事件。
 
-- **HUD shows nothing / HUD 不显示**: it is off by default — run with `BA_SHOW_HUD=1`.
+- **HUD shows nothing**: it is off by default — run with `BA_SHOW_HUD=1`.
   
-  默认关闭——用 `BA_SHOW_HUD=1` 运行。
+  **HUD 不显示**：默认关闭——用 `BA_SHOW_HUD=1` 运行。
 
-- **Settings not applied / 设置没生效**: the file is read at launch — if you edited it while the app was running, restart; for live tuning use the panel. Watch stderr for `[settings] WARNING:` (invalid JSON → defaults; unknown key → ignored).
+- **Settings not applied**: the file is read at launch — if you edited it while the app was running, restart; for live tuning use the panel. Watch stderr for `[settings] WARNING:` (invalid JSON → defaults; unknown key → ignored).
   
-  配置文件在启动时读取——应用运行中改文件需重启生效；实时调参请用面板。留意 stderr 的 `[settings] WARNING:`（JSON 非法 → 回退默认值；未知键 → 忽略）。
+  **设置没生效**：配置文件在启动时读取——应用运行中改文件需重启生效；实时调参请用面板。留意 stderr 的 `[settings] WARNING:`（JSON 非法 → 回退默认值；未知键 → 忽略）。
 
 ## Notes / 备注
 
