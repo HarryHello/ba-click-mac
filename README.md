@@ -27,24 +27,42 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 
 ## Status / 状态
 
-- ✅ Transparent click-through overlay / 透明可穿透覆盖层
-- ✅ Global click + mouse-move tracking / 全局点击 + 鼠标移动追踪
-- ✅ Click effect: center disk, rotating dissolve arcs, flying shards / 点击特效：中心圆盘、旋转溶解弧光、飞散碎片
-- ✅ Cursor trail with width taper / 带收细的鼠标光迹
-- ✅ Original game textures + Unity particle curves / 原始游戏贴图 + Unity 粒子曲线
-- ✅ Multi-pass MXFinalBloom (HDR scene → pyramid → additive glow) / 多级 MXFinalBloom 辉光（HDR 场景 → 金字塔 → 叠加辉光）
-- ✅ Works over fullscreen apps (persistent per-screen NSPanels) / 全屏应用之上正常显示（每屏常驻 NSPanel）
-- ✅ Manual vsync render loop, 24–240 fps (display-link stalls fixed) / 手动垂直同步渲染循环，24–240fps（修复 display link 停滞）
-- ✅ Idle power saving (render stops when nothing is on screen; displays without active content skip their whole pipeline) / 闲置省电（无内容时停止渲染；无活动粒子的显示器整条渲染管线跳过）
-- ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`) / 单元测试 + CI
-- ✅ Menu bar icon + management panel (no Dock icon) / 菜单栏图标 + 管理面板（无 Dock 图标）
-- ✅ Right-click + middle-click effects (independently toggleable) / 右键 + 中键点击效果（可独立开关）
-- ✅ Update check + self-update (falls back to GitHub Releases) / 检查更新 + 自动更新（失败时跳转 Releases）
-- ✅ Optional auto update check (at launch + panel open, throttled & silent) / 可选的自动检测更新（启动 + 打开面板时，节流且静默）
-- ✅ Battery saver: run effects only when plugged in / 仅接通电源时启用（电池时自动暂停特效）
-- ✅ Force topmost (opt-in, private SkyLight API): renders above Dock/menus/launchers/even the lock screen / 强制置顶（可选，私有 SkyLight API）：显示在 Dock、菜单、启动器甚至锁屏之上
-- ✅ Launch at login / 开机自启
-- ✅ Multi-monitor overlays, one per attached display / 多显示器覆盖层（每个显示器一个）
+- ✅ Transparent click-through overlay
+  透明可穿透覆盖层
+- ✅ Global click + mouse-move tracking
+  全局点击 + 鼠标移动追踪
+- ✅ Click effect: center disk, rotating dissolve arcs, flying shards
+  点击特效：中心圆盘、旋转溶解弧光、飞散碎片
+- ✅ Cursor trail with width taper
+  带收细的鼠标光迹
+- ✅ Original game textures + Unity particle curves
+  原始游戏贴图 + Unity 粒子曲线
+- ✅ Multi-pass MXFinalBloom (HDR scene → pyramid → additive glow)
+  多级 MXFinalBloom 辉光（HDR 场景 → 金字塔 → 叠加辉光）
+- ✅ Works over fullscreen apps (persistent per-screen NSPanels)
+  全屏应用之上正常显示（每屏常驻 NSPanel）
+- ✅ Manual vsync render loop, 24–240 fps (display-link stalls fixed)
+  手动垂直同步渲染循环，24–240fps（修复 display link 停滞）
+- ✅ Idle power saving (render stops when nothing is on screen; displays without active content skip their whole pipeline)
+  闲置省电（无内容时停止渲染；无活动粒子的显示器整条渲染管线跳过）
+- ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`)
+  单元测试 + CI
+- ✅ Menu bar icon + management panel (no Dock icon)
+  菜单栏图标 + 管理面板（无 Dock 图标）
+- ✅ Right-click + middle-click effects (independently toggleable)
+  右键 + 中键点击效果（可独立开关）
+- ✅ Update check + self-update (falls back to GitHub Releases)
+  检查更新 + 自动更新（失败时跳转 Releases）
+- ✅ Optional auto update check (at launch + panel open, throttled & silent)
+  可选的自动检测更新（启动 + 打开面板时，节流且静默）
+- ✅ Battery saver: run effects only when plugged in
+  仅接通电源时启用（电池时自动暂停特效）
+- ✅ Force topmost (opt-in, private SkyLight API): renders above Dock/menus/launchers/even the lock screen
+  强制置顶（可选，私有 SkyLight API）：显示在 Dock、菜单、启动器甚至锁屏之上
+- ✅ Launch at login
+  开机自启
+- ✅ Multi-monitor overlays, one per attached display
+  多显示器覆盖层（每个显示器一个）
 
 > **App icon / 应用图标**: authored in the modern **Icon Composer** (macOS 26+ / Xcode 26) as `icons/icon.icon` (an `icon.json` manifest + layered `Assets/*.svg`). The format is **full-bleed** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing in Icon Composer, regenerate with `./tools/build-icon.sh` (renders via the bundled `ictool` CLI, produces `Resources/icon.png` + `Resources/AppIcon.icns`). Requires `/Applications/Icon Composer.app`.
 >
@@ -162,28 +180,50 @@ Every runtime setting touches the same places — keep them in sync:
 ## How it works / 工作原理
 
 - **Persistent per-screen `NSPanel`s** — each attached display gets a borderless, non-activating overlay panel with `level = .floating`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]`, and `ignoresMouseEvents = true`. Per-screen panels avoid macOS/Spaces edge cases where one giant transparent window does not render on every display.
+  
   **每屏常驻 `NSPanel`**——每个已连接显示器都有一个无边框、非激活覆盖层，`level = .floating`、`collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]`、`ignoresMouseEvents = true`。每屏独立面板可避开 macOS/Spaces 下单个超大透明窗口无法在所有显示器渲染的边缘情况。
+
 - **Manual vsync-synced render loop** — the MTKView's internal display link randomly stalls after Space/fullscreen transitions (the effect appeared "sometimes dead"), so we keep `isPaused = true` and drive `MTKView.draw()` ourselves via a `CADisplayLink` (vsync-synced, macOS 14+; `Timer` fallback on 13). The trail samples the live mouse position every frame, so it stays smooth even when the OS coalesces mouse-moved events. An App Nap activity (`beginActivity(.userInitiated)`) keeps the background app's driver alive, and a watchdog rebuilds the driver if it stalls.
+  
   **手动 vsync 同步渲染循环**——MTKView 内部 display link 在 Space/全屏切换后会随机停滞（表现为特效"时有时无"），所以我们保持 `isPaused = true`，用自建 `CADisplayLink`（vsync 同步，macOS 14+；macOS 13 用 `Timer` 回退）驱动 `MTKView.draw()`。尾迹每帧直接采样鼠标实时位置，即使系统合并了 mouse-moved 事件也保持顺滑。`beginActivity(.userInitiated)` 防止 App Nap 节流后台应用，看门狗会在驱动停滞时重建它。
+
 - **Idle power saving** — the render loop stops itself as soon as nothing is on screen; clicks / mouse moves / the click-loop wake it. With `showInFullscreen=false`, the overlay hides and rendering fully stops over fullscreen apps.
+  
   **闲置省电**——屏幕上没有内容时渲染循环自动停止；点击 / 移动鼠标 / 自动点击循环会唤醒它。`showInFullscreen=false` 时，全屏应用之上会隐藏覆盖层并完全停止渲染。
+
 - **Events** — `NSEvent.addGlobalMonitorForEvents` observes clicks/moves system-wide. The app must **never** become frontmost, or the global monitor stops receiving events (we use `orderFrontRegardless()`, never `activate`).
+  
   **事件**——`NSEvent.addGlobalMonitorForEvents` 全局监听点击/移动。应用**绝不能**变成前台，否则全局监听会收不到事件（我们只用 `orderFrontRegardless()`，绝不 `activate`）。
+
 - **Rendering** — offscreen HDR scene (`rgba16Float`) → `MXFinalBloom` pyramid (prefilter → downsample → upsample) → additive composite over the sharp core. Bloom is skipped entirely when nothing is on screen.
+  
   **渲染**——离屏 HDR 场景（`rgba16Float`）→ `MXFinalBloom` 金字塔（预过滤 → 降采样 → 升采样）→ 在锐利核心之上做叠加。屏幕无内容时完全跳过辉光。
+
 - **Management panel** — a SwiftUI panel in a **titled, non-activating NSPanel** with a **native Liquid Glass body** (`NSGlassEffectView`, macOS 26+; resolved via `NSClassFromString` so the code still builds against older SDKs). On older systems it falls back to a classic `NSVisualEffectView` (`.menu` material) glass. `titlebarAppearsTransparent` + `fullSizeContentView` keep the native traffic lights and title-bar dragging while the window stays transparent so the glass shows through. It becomes key for controls but never activates the app, so the global mouse monitor keeps feeding the overlay while you tune. Clicking the menu bar icon shows a menu (打开管理面板 / 退出 BA Click). All changes apply to the renderer immediately and persist (debounced) to `settings.json`.
+  
   **管理面板**——SwiftUI 面板，放在**带标题栏、非激活 NSPanel** 里，主体为**原生液态玻璃**（`NSGlassEffectView`，macOS 26+；用 `NSClassFromString` 运行时查找，旧 SDK 也能编译）。老系统自动回退经典 `NSVisualEffectView`（`.menu` 材质）玻璃。`titlebarAppearsTransparent` + `fullSizeContentView` 保留原生红绿灯与标题栏拖动，同时窗口透明让玻璃透出。控件可用但不激活应用，所以调参时全局鼠标监听仍在工作。点击菜单栏图标弹出菜单（打开管理面板 / 退出 BA Click）。所有改动即时生效并（防抖）持久化到 `settings.json`。
-- **Trail mode / 尾迹模式** — "始终显示尾迹" on: trail follows any mouse move. Off: trail only appears while a mouse button is held and dragging (left / right / middle all work).
+
+- **Trail mode** — "始终显示尾迹" on: trail follows any mouse move. Off: trail only appears while a mouse button is held and dragging (left / right / middle all work).
+  
   **尾迹模式**——开启"始终显示尾迹"：尾迹跟随任意鼠标移动；关闭：仅在按住任意鼠标键并拖动时显示尾迹（左键 / 右键 / 中键均可）。
 - **Mouse buttons / 鼠标按键** — left, right and middle clicks all spawn the click effect; right/middle are independently toggleable in the panel (`rightClickEnabled` / `middleClickEnabled`).
+  
   **鼠标按键**——左键、右键、中键点击都会触发点击特效；右键 / 中键可在面板中独立开关（`rightClickEnabled` / `middleClickEnabled`）。
+
 - **Updates / 更新** — panel's **检查更新** queries the GitHub latest release API and compares versions; **自动检测更新** (on by default) checks once at launch (3s in) and each time the panel opens, throttled to once per 60s and silent on failure — the manual button always checks for real. The status line always shows the running version (e.g. `v0.3.3`) when idle, then `v0.3.3 已是最新版本` / `发现新版本 vX.Y.Z`. **立即更新** downloads the DMG for the running architecture, verifies it is signed with the SAME certificate as the running app (designated-requirement match — a tampered proxy-served download is refused), mounts it, atomically replaces the app bundle via a detached helper (`~/Library/Logs/BA Click/update.log`, rollback on failure) and relaunches. When auto-update isn't possible (raw binary / unwritable location / failure) it opens the GitHub Releases page. The **GitHub 仓库** button opens the repo home.
+  
   **更新**——面板**检查更新**查询 GitHub 最新 release 并与当前版本对比；**自动检测更新**（默认开）在启动 3 秒后和每次打开面板时各检查一次，60 秒节流、失败静默——手动点按钮则始终真实检查。状态栏空闲时常显当前版本号（如 `v0.3.3`），检查后显示 `v0.3.3 已是最新版本` / `发现新版本 vX.Y.Z`。**立即更新**下载对应架构 DMG，先校验其签名与当前应用是同一张证书（设计需求匹配，代理投递的篡改包会被拒绝）→ 挂载 → 通过分离助手脚本原子替换应用包（日志在 `~/Library/Logs/BA Click/update.log`，失败自动回滚）→ 自动重启。无法自动更新（裸二进制 / 目录不可写 / 失败）时跳转 GitHub Releases 页面；**GitHub 仓库**按钮打开仓库主页。
+
 - **Battery saver / 仅接通电源时启用** — when the toggle is on, all effects pause on battery power and resume the moment AC power returns (IOKit power-source notification). Desktops without a battery count as always plugged in, so the toggle is a no-op there.
+  
   **省电**——开关打开后，使用电池时自动暂停全部特效，插回电源立即恢复（IOKit 电源源通知）。没有电池的台式机视为始终接通电源，此开关无副作用。
+  
 - **GitHub proxies / GitHub 代理** — when the direct connection to `api.github.com` / `github.com` is blocked or fails, the update check and the DMG download fall back to the configured proxies in order (`AppInfo.swift` → `GitHubProxy`). Verified reachable: `gh-proxy.org`, `gh-proxy.com` (API + download), `ghproxy.net`, `ghfast.top` (download only).
+  
   **GitHub 代理**——当直连 `api.github.com` / `github.com` 被墙或失败时，检查更新与 DMG 下载会按序回退到配置的代理（`AppInfo.swift` 里的 `GitHubProxy`）。实测可用：`gh-proxy.org`、`gh-proxy.com`（API + 下载）、`ghproxy.net`、`ghfast.top`（仅下载）。
+
 - **Launch at login / 开机自启** — bundled apps register via `SMAppService`, so the entry shows up in System Settings → General → Login Items; registering never launches the app on the spot. The raw binary (run.sh) can't self-register there and falls back to a user LaunchAgent plist, registered dormant (disable → bootstrap → enable). Legacy plist registrations (≤0.2.1) migrate on the next toggle. A `flock` single-instance lock (`~/.ba-click-mac.lock`) makes any double-launch exit immediately.
+  
   **开机自启**——捆绑版通过 `SMAppService` 注册，条目出现在 系统设置 → 通用 → 登录项，注册绝不当场启动；裸二进制（run.sh）回退为用户 LaunchAgent plist，以"禁用→注册→启用"方式休眠注册。旧版（≤0.2.1）的 plist 注册在下次切换开关时自动迁移。另有 `flock` 单实例锁（`~/.ba-click-mac.lock`），双开时第二个实例立即退出。
 
 ## Project layout / 工程结构
@@ -233,18 +273,27 @@ settings.example.json        Template for optional runtime tuning
 ## Permissions / 权限
 
 Global mouse observation via `NSEvent.addGlobalMonitorForEvents` is generally allowed on macOS — no special permission needed. (A future `CGEventTap` would require Accessibility.)
+
 通过 `NSEvent.addGlobalMonitorForEvents` 的全局鼠标监听在 macOS 上一般无需额外权限。（未来若改用 `CGEventTap` 则需要"辅助功能"权限。）
 
 ## Troubleshooting / 排障
 
-- **Effect appears randomly / 特效随机消失或时有时无**: this used to be the MTKView display link stalling after Space/fullscreen transitions — now fixed by the manual 60 fps render loop. If it ever looks dead again, check the watchdog (a stale frame forces a redraw every 0.5 s). / 这曾是 MTKView display link 在 Space/全屏切换后停滞所致——现已通过手动 60fps 渲染循环修复。若再次看起来"死了"，看门狗每 0.5 秒会强制补一帧。
-- **App exits immediately with a `FATAL:` message / 启动即退出并打印 `FATAL:`**: Metal device / shader compile / texture load failed — run from a terminal to see the exact reason (resources must exist in `Resources/` with the expected sizes). / Metal 设备 / Shader 编译 / 纹理加载失败——请从终端运行查看具体原因（`Resources/` 下资源必须存在且尺寸匹配）。
-- **No click response at all / 点击完全无反应**: make sure the app is not frontmost (never `activate` it); the global mouse monitor only receives events while another app is active. / 请确认应用不是前台（绝不 `activate`）；全局鼠标监听只在其他应用为前台时才能收到事件。
-- **HUD shows nothing / HUD 不显示**: it is off by default — run with `BA_SHOW_HUD=1`. / 默认关闭——用 `BA_SHOW_HUD=1` 运行。
-- **Settings not applied / 设置没生效**: the app reloads every 0.5 s; watch stderr for `[settings] WARNING:` (invalid JSON → defaults; unknown key → ignored). / 应用每 0.5 秒重载；留意 stderr 的 `[settings] WARNING:`（JSON 非法 → 回退默认值；未知键 → 忽略）。
+- **Effect appears randomly / 特效随机消失或时有时无**: this used to be the MTKView display link stalling after Space/fullscreen transitions — now fixed by the manual 60 fps render loop. If it ever looks dead again, check the watchdog (a stale frame forces a redraw every 0.5 s).
+  这曾是 MTKView display link 在 Space/全屏切换后停滞所致——现已通过手动 60fps 渲染循环修复。若再次看起来"死了"，看门狗每 0.5 秒会强制补一帧。
+- **App exits immediately with a `FATAL:` message / 启动即退出并打印 `FATAL:`**: Metal device / shader compile / texture load failed — run from a terminal to see the exact reason (resources must exist in `Resources/` with the expected sizes).
+  Metal 设备 / Shader 编译 / 纹理加载失败——请从终端运行查看具体原因（`Resources/` 下资源必须存在且尺寸匹配）。
+- **No click response at all / 点击完全无反应**: make sure the app is not frontmost (never `activate` it); the global mouse monitor only receives events while another app is active.
+  请确认应用不是前台（绝不 `activate`）；全局鼠标监听只在其他应用为前台时才能收到事件。
+- **HUD shows nothing / HUD 不显示**: it is off by default — run with `BA_SHOW_HUD=1`.
+  默认关闭——用 `BA_SHOW_HUD=1` 运行。
+- **Settings not applied / 设置没生效**: the app reloads every 0.5 s; watch stderr for `[settings] WARNING:` (invalid JSON → defaults; unknown key → ignored).
+  应用每 0.5 秒重载；留意 stderr 的 `[settings] WARNING:`（JSON 非法 → 回退默认值；未知键 → 忽略）。
 
 ## Notes / 备注
 
-- The overlay never steals focus; clicks pass through to the apps below. / 覆盖层从不抢占焦点；点击穿透到下层应用。
-- Coordinates are in AppKit screen points, scaled by screen height (mirroring the web project's 1080p reference). / 坐标基于 AppKit 屏幕点，按屏幕高度缩放（对齐网页版的 1080p 参考高度）。
-- A from-scratch native implementation; visual parameters are ported from the `ba-click-fx` web project's unpacked Unity data. / 原生从零实现；视觉参数移植自 `ba-click-fx` 网页项目解包出的 Unity 数据。
+- The overlay never steals focus; clicks pass through to the apps below.
+  覆盖层从不抢占焦点；点击穿透到下层应用。
+- Coordinates are in AppKit screen points, scaled by screen height (mirroring the web project's 1080p reference).
+  坐标基于 AppKit 屏幕点，按屏幕高度缩放（对齐网页版的 1080p 参考高度）。
+- A from-scratch native implementation; visual parameters are ported from the `ba-click-fx` web project's unpacked Unity data.
+  原生从零实现；视觉参数移植自 `ba-click-fx` 网页项目解包出的 Unity 数据。
