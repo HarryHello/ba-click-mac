@@ -364,8 +364,13 @@ Global mouse observation via `NSEvent.addGlobalMonitorForEvents` is generally al
 ## Notes / 备注
 
 - The overlay never steals focus; clicks pass through to the apps below.
+  
   覆盖层从不抢占焦点；点击穿透到下层应用。
+
 - Coordinates are in AppKit screen points, scaled by screen height (mirroring the web project's 1080p reference).
+  
   坐标基于 AppKit 屏幕点，按屏幕高度缩放（对齐网页版的 1080p 参考高度）。
+
 - A from-scratch native implementation; visual parameters are ported from the `ba-click-fx` web project's unpacked Unity data.
+  
   原生从零实现；视觉参数移植自 `ba-click-fx` 网页项目解包出的 Unity 数据。
