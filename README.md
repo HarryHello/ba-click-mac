@@ -21,8 +21,8 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 | Fullscreen | NSPanel (`fullScreenAuxiliary`) is carried into fullscreen apps' Spaces automatically — works over QQ / Chrome fullscreen video | NSPanel（`fullScreenAuxiliary`）自动进入全屏应用的 Space —— QQ / Chrome 全屏视频下均正常 |
 | Live tuning | Edit `settings.json`, hot-reloaded every 0.5 s; partial files allowed | 编辑 `settings.json`，每 0.5 秒热重载；允许只写要改的键 |
 | Power saving | Stops rendering when idle; no GPU work behind hidden fullscreen (`showInFullscreen=false`) | 闲置时停止渲染；隐藏全屏时不产生 GPU 开销（`showInFullscreen=false`） |
-| Management panel | Apple-native panel via the menu bar icon: effect on/off, launch at login, trail mode/thickness/glow, click size/brightness/opacity, refresh rate, right/middle-click toggles, power-saver toggle, auto update check, update status with the running version | 菜单栏图标打开的 Apple 原生管理面板：效果开关、开机自启、仅接通电源时启用、尾迹模式/粗细/辉光、点击大小/亮度/透明度、刷新率、右键/中键开关、自动检测更新、检查更新 + GitHub 仓库（状态栏常显当前版本号） |
-| i18n | Chinese/English UI, auto-detects the system language (`zh*` → 中文) | 中英双语界面，自动检测系统语言（`zh*` → 中文） |
+| Management panel | Apple-native panel via the menu bar icon: effect on/off, launch at login, trail mode/thickness/glow, click size/brightness/opacity, refresh rate, right/middle-click toggles, power-saver toggle, force topmost, click statistics, auto update check, update status with the running version, reset to defaults, language selector | 菜单栏图标打开的 Apple 原生管理面板：效果开关、开机自启、仅接通电源时启用、强制置顶、尾迹模式/粗细/辉光、点击大小/亮度/透明度、刷新率、右键/中键开关、点击统计、自动检测更新、检查更新 + GitHub 仓库（状态栏常显当前版本号）、恢复默认设置、语言选择 |
+| i18n | Chinese/English/Japanese UI with a language selector in the panel (auto-detect by default) | 中/英/日三语界面，面板内置语言选择器（默认跟随系统） |
 | No Dock icon | Runs as an `.accessory` app (menu bar only), so the Dock stays clean | `.accessory` 模式运行（仅菜单栏），Dock 干净 |
 
 ## Status / 状态
@@ -30,77 +30,97 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 - ✅ Transparent click-through overlay
 
   透明可穿透覆盖层
+
 - ✅ Global click + mouse-move tracking
 
   全局点击 + 鼠标移动追踪
+
 - ✅ Click effect: center disk, rotating dissolve arcs, flying shards
 
   点击特效：中心圆盘、旋转溶解弧光、飞散碎片
+
 - ✅ Cursor trail with width taper
 
   带收细的鼠标光迹
+
 - ✅ Original game textures + Unity particle curves
 
   原始游戏贴图 + Unity 粒子曲线
+
 - ✅ Multi-pass MXFinalBloom (HDR scene → pyramid → additive glow)
 
   多级 MXFinalBloom 辉光（HDR 场景 → 金字塔 → 叠加辉光）
+
 - ✅ Works over fullscreen apps (persistent per-screen NSPanels)
 
   全屏应用之上正常显示（每屏常驻 NSPanel）
+
 - ✅ Manual vsync render loop, 24–240 fps (display-link stalls fixed)
 
   手动垂直同步渲染循环，24–240fps（修复 display link 停滞）
+
 - ✅ Idle power saving (render stops when nothing is on screen; displays without active content skip their whole pipeline)
 
   闲置省电（无内容时停止渲染；无活动粒子的显示器整条渲染管线跳过）
+
 - ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`)
 
   单元测试 + CI
+
 - ✅ Menu bar icon + management panel (no Dock icon)
 
   菜单栏图标 + 管理面板（无 Dock 图标）
+
 - ✅ Right-click + middle-click effects (independently toggleable)
 
   右键 + 中键点击效果（可独立开关）
+
 - ✅ Update check + self-update (falls back to GitHub Releases)
 
   检查更新 + 自动更新（失败时跳转 Releases）
+
 - ✅ Optional auto update check (at launch + panel open, throttled & silent)
 
   可选的自动检测更新（启动 + 打开面板时，节流且静默）
+
 - ✅ Battery saver: run effects only when plugged in
 
   仅接通电源时启用（电池时自动暂停特效）
+
 - ✅ Force topmost (opt-in, private SkyLight API): renders above Dock/menus/launchers/even the lock screen
 
   强制置顶（可选，私有 SkyLight API）：显示在 Dock、菜单、启动器甚至锁屏之上
+
 - ✅ Launch at login
 
   开机自启
+
 - ✅ Multi-monitor overlays, one per attached display
 
   多显示器覆盖层（每个显示器一个）
 
-> **App icon / 应用图标**: authored in the modern **Icon Composer** (macOS 26+ / Xcode 26) as `icons/icon.icon` (an `icon.json` manifest + layered `Assets/*.svg`). The format is **full-bleed** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing in Icon Composer, regenerate with `./tools/build-icon.sh` (renders via the bundled `ictool` CLI, produces `Resources/icon.png` + `Resources/AppIcon.icns`). Requires `/Applications/Icon Composer.app`.
+> **App icon**: authored in the modern **Icon Composer** (macOS 26+ / Xcode 26) as `icons/icon.icon` (an `icon.json` manifest + layered `Assets/*.svg`). The format is **full-bleed** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing in Icon Composer, regenerate with `./tools/build-icon.sh` (renders via the bundled `ictool` CLI, produces `Resources/icon.png` + `Resources/AppIcon.icns`). Requires `/Applications/Icon Composer.app`.
 >
-> 应用图标：用新版 **Icon Composer**（macOS 26+ / Xcode 26）制作，源文件为 `icons/icon.icon`（`icon.json` 清单 + 分层 `Assets/*.svg`）。该格式是**满幅**的——macOS 会在 Dock/Launchpad 自动套上自家的 squircle mask（连续曲线，不是普通圆角，且随系统版本不同），所以**不要**在素材里自己烘焙圆角或边距。在 Icon Composer 里改完用 `./tools/build-icon.sh` 重新生成（内部调用自带的 `ictool` CLI）。需要装有 `/Applications/Icon Composer.app`。
+> **应用图标**：用新版 **Icon Composer**（macOS 26+ / Xcode 26）制作，源文件为 `icons/icon.icon`（`icon.json` 清单 + 分层 `Assets/*.svg`）。该格式是**满幅**的——macOS 会在 Dock/Launchpad 自动套上自家的 squircle mask（连续曲线，不是普通圆角，且随系统版本不同），所以**不要**在素材里自己烘焙圆角或边距。在 Icon Composer 里改完用 `./tools/build-icon.sh` 重新生成（内部调用自带的 `ictool` CLI）。需要装有 `/Applications/Icon Composer.app`。
 >
-> **Menu bar icon / 菜单栏图标**: rendered at 22 pt from `icons/bar_icon.svg`. After editing the SVG, regenerate with
+> **Menu bar icon**: rendered at 22 pt from `icons/bar_icon.svg`. After editing the SVG, regenerate with
 > `./tools/svg2png.sh icons/bar_icon.svg Resources/bar_icon_22.png 22` and
 > `./tools/svg2png.sh icons/bar_icon.svg Resources/bar_icon_44.png 44`.
 >
-> 菜单栏图标以 22pt 渲染，源文件为 `icons/bar_icon.svg`。改完 SVG 后用上面的命令重新生成 PNG。
+> **菜单栏图标**：以 22pt 渲染，源文件为 `icons/bar_icon.svg`。改完 SVG 后用上面的命令重新生成 PNG。
 
 ## Requirements / 环境要求
 
-- macOS 13+ (built with `./build.sh`; macOS 14+ enables the vsync render driver, macOS 26+ the native liquid-glass panel)
+- macOS 14+ (built with `./build.sh`; the vsync render driver is the floor, macOS 26+ enables the native liquid-glass panel)
+  macOS 14+（`./build.sh` 构建；macOS 14 起启用 vsync 渲染驱动，macOS 26+ 启用原生液态玻璃面板）
 - The x64 (Intel) DMG only runs while macOS still ships Rosetta 2 — macOS 27 is the last major release to support Intel apps, so the x64 build is end-of-life with macOS 28. Apple Silicon users should use the arm64 DMG.
 - x64（Intel）DMG 依赖 macOS 自带的 Rosetta 2：macOS 27 是最后支持 Intel 应用的大版本，macOS 28 起 x64 构建将无法运行。Apple Silicon 用户请使用 arm64 DMG。
 - Xcode Command Line Tools or Xcode (Swift toolchain)
+  Xcode Command Line Tools 或 Xcode（Swift 工具链）
 - A Metal-capable Mac (any Apple Silicon, most Intel Macs)
 - 需要 Metal 支持的 Mac（Apple Silicon 或大部分 Intel Mac）
 - `build.sh` is the single build entry (binary, or `--app` for the .app bundle); there is no SPM `Package.swift` — `test.sh` builds the unit-test harness directly.
+  `build.sh` 是唯一构建入口（二进制，或 `--app` 构建可双击 .app 包）；无 SPM `Package.swift`——`test.sh` 直接构建单元测试。
 
 ## Build, run & test / 构建、运行与测试
 
@@ -117,8 +137,9 @@ Or build a double-clickable app bundle / 或构建可双击的 .app 包:
 open build/BaClickMac.app
 ```
 
-The app runs as an `.accessory` app (no Dock icon, no menu bar) with a **menu bar icon**. Clicking the icon shows a menu: **打开管理面板** (toggle open/close) and **退出 BA Click**. Quit also via the panel's **退出 BA Click** button or `pkill BaClickMac`.
-应用以 `.accessory` 模式运行（无 Dock 图标、无菜单栏），只有**菜单栏图标**。点击图标弹出菜单：**打开管理面板**（开关）与**退出 BA Click**。也可用面板里的**退出 BA Click** 按钮或 `pkill BaClickMac` 退出。
+The app runs as an `.accessory` app (no Dock icon, no menu bar) with a **menu bar icon**. Clicking the icon shows a menu: **启用/停用特效 / Enable-Disable Effects** (quick toggle), **打开管理面板 / Open Management Panel** and **退出 BA Click / Quit BA Click**. Quit also via the panel's quit button or `pkill BaClickMac`.
+
+应用以 `.accessory` 模式运行（无 Dock 图标、无菜单栏），只有**菜单栏图标**。点击图标弹出菜单：**启用/停用特效**（快捷开关）、**打开管理面板**与**退出 BA Click**。也可用面板里的**退出 BA Click** 按钮或 `pkill BaClickMac` 退出。
 
 ### Isolated click testing / 单独测试点击特效
 
@@ -131,7 +152,7 @@ BA_CLICK_LOOP=1 ./run.sh   # auto-clicks screen center every 0.9 s
 | Variable | Effect | 说明 |
 |---|---|---|
 | `BA_CLICK_LOOP=1` | Auto-click at screen center every 0.9 s (isolated click-effect testing) | 每 0.9 秒在屏幕中心自动点击（单独测试点击特效） |
-| `BA_SHOW_HUD=1` | Show the debug HUD (bloom/particle counts) in the top-left corner | 在左上角显示调试 HUD（辉光/粒子数量） |
+| `BA_SHOW_HUD=1` | Show the debug HUD (render rates, skip counters, degraded flags, drawAge) in the top-left corner | 在左上角显示调试 HUD（渲染速率、跳过计数、降级标志、drawAge） |
 | `BA_DISABLE_BLOOM=1` | Disable bloom entirely (core effect only) | 完全关闭辉光（只画核心特效） |
 | `BA_BLOOM_DEBUG_VIEW=1` | Show only the bloom pyramid (no core) — for verifying the glow itself | 只显示辉光金字塔（无核心）—— 用于验证辉光本身 |
 
@@ -165,7 +186,7 @@ The app loads `settings.json` from the **current working directory**, the **exec
 | `triangleOpacity` | `1.0` | Triangle particle opacity (higher = more opaque) / 三角粒子不透明度（越高越实） |
 | `refreshRate` | `60` | Render refresh rate (30/60/120/240) / 渲染刷新率 |
 
-> **Launch at login / 开机自启** is not persisted in `settings.json` — it's system state (SMAppService / LaunchAgent) toggled by the panel's 开机自启 switch.
+> **Launch at login / 开机自启** is not persisted in `settings.json` — it's system state (SMAppService / LaunchAgent) toggled by the panel's launch-at-login switch (开机自启).
 
 > **Lenient parsing / 宽容解析**: a `settings.json` may contain **only the keys you want to override** — missing keys keep the defaults. Unknown keys print a warning to stderr (ignored); invalid JSON prints a warning and falls back to defaults. This is intentional, so a partial edit never silently wipes your other settings.
 >
@@ -201,9 +222,9 @@ Every runtime setting touches the same places — keep them in sync:
   
   **每屏常驻 `NSPanel`**——每个已连接显示器都有一个无边框、非激活覆盖层，`level = .floating`、`collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]`、`ignoresMouseEvents = true`。每屏独立面板可避开 macOS/Spaces 下单个超大透明窗口无法在所有显示器渲染的边缘情况。
 
-- **Manual vsync-synced render loop** — the MTKView's internal display link randomly stalls after Space/fullscreen transitions (the effect appeared "sometimes dead"), so we keep `isPaused = true` and drive `MTKView.draw()` ourselves via a `CADisplayLink` (vsync-synced, macOS 14+; `Timer` fallback on 13). The trail samples the live mouse position every frame, so it stays smooth even when the OS coalesces mouse-moved events. An App Nap activity (`beginActivity(.userInitiated)`) keeps the background app's driver alive, and a watchdog rebuilds the driver if it stalls.
+- **Manual vsync-synced render loop** — the MTKView's internal display link randomly stalls after Space/fullscreen transitions (the effect appeared "sometimes dead"), so we keep `isPaused = true` and drive `MTKView.draw()` ourselves via a `CADisplayLink` (vsync-synced). The trail samples the live mouse position every frame, so it stays smooth even when the OS coalesces mouse-moved events. An App Nap activity (`beginActivity(.userInitiated)`) keeps the background app's driver alive, and a watchdog rebuilds the driver if the tick loop goes silent.
   
-  **手动 vsync 同步渲染循环**——MTKView 内部 display link 在 Space/全屏切换后会随机停滞（表现为特效"时有时无"），所以我们保持 `isPaused = true`，用自建 `CADisplayLink`（vsync 同步，macOS 14+；macOS 13 用 `Timer` 回退）驱动 `MTKView.draw()`。尾迹每帧直接采样鼠标实时位置，即使系统合并了 mouse-moved 事件也保持顺滑。`beginActivity(.userInitiated)` 防止 App Nap 节流后台应用，看门狗会在驱动停滞时重建它。
+  **手动 vsync 同步渲染循环**——MTKView 内部 display link 在 Space/全屏切换后会随机停滞（表现为特效"时有时无"），所以我们保持 `isPaused = true`，用自建 `CADisplayLink`（vsync 同步）驱动 `MTKView.draw()`。尾迹每帧直接采样鼠标实时位置，即使系统合并了 mouse-moved 事件也保持顺滑。`beginActivity(.userInitiated)` 防止 App Nap 节流后台应用，看门狗会在 tick 循环沉默时重建它。
 
 - **Idle power saving** — the render loop stops itself as soon as nothing is on screen; clicks / mouse moves / the click-loop wake it. With `showInFullscreen=false`, the overlay hides and rendering fully stops over fullscreen apps.
   
@@ -217,18 +238,18 @@ Every runtime setting touches the same places — keep them in sync:
   
   **渲染**——离屏 HDR 场景（`rgba16Float`）→ `MXFinalBloom` 金字塔（预过滤 → 降采样 → 升采样）→ 在锐利核心之上做叠加。屏幕无内容时完全跳过辉光。
 
-- **Management panel** — a SwiftUI panel in a **titled, non-activating NSPanel** with a **native Liquid Glass body** (`NSGlassEffectView`, macOS 26+; resolved via `NSClassFromString` so the code still builds against older SDKs). On older systems it falls back to a classic `NSVisualEffectView` (`.menu` material) glass. `titlebarAppearsTransparent` + `fullSizeContentView` keep the native traffic lights and title-bar dragging while the window stays transparent so the glass shows through. It becomes key for controls but never activates the app, so the global mouse monitor keeps feeding the overlay while you tune. Clicking the menu bar icon shows a menu (打开管理面板 / 退出 BA Click). All changes apply to the renderer immediately and persist (debounced) to `settings.json`.
+- **Management panel** — a SwiftUI panel in a **titled, non-activating NSPanel** with a **native Liquid Glass body** (`NSGlassEffectView`, macOS 26+; resolved via `NSClassFromString` so the code still builds against older SDKs). On older systems it falls back to a classic `NSVisualEffectView` (`.menu` material) glass. `titlebarAppearsTransparent` + `fullSizeContentView` keep the native traffic lights and title-bar dragging while the window stays transparent so the glass shows through. It becomes key for controls but never activates the app, so the global mouse monitor keeps feeding the overlay while you tune. It becomes key for controls but never activates the app, so the global mouse monitor keeps feeding the overlay while you tune. Clicking the menu bar icon shows a menu (快捷启停特效 / 打开管理面板 / 退出 BA Click). All changes apply to the renderer immediately and persist (debounced) to `settings.json`.
   
-  **管理面板**——SwiftUI 面板，放在**带标题栏、非激活 NSPanel** 里，主体为**原生液态玻璃**（`NSGlassEffectView`，macOS 26+；用 `NSClassFromString` 运行时查找，旧 SDK 也能编译）。老系统自动回退经典 `NSVisualEffectView`（`.menu` 材质）玻璃。`titlebarAppearsTransparent` + `fullSizeContentView` 保留原生红绿灯与标题栏拖动，同时窗口透明让玻璃透出。控件可用但不激活应用，所以调参时全局鼠标监听仍在工作。点击菜单栏图标弹出菜单（打开管理面板 / 退出 BA Click）。所有改动即时生效并（防抖）持久化到 `settings.json`。
+  **管理面板**——SwiftUI 面板，放在**带标题栏、非激活 NSPanel** 里，主体为**原生液态玻璃**（`NSGlassEffectView`，macOS 26+；用 `NSClassFromString` 运行时查找，旧 SDK 也能编译）。老系统自动回退经典 `NSVisualEffectView`（`.menu` 材质）玻璃。`titlebarAppearsTransparent` + `fullSizeContentView` 保留原生红绿灯与标题栏拖动，同时窗口透明让玻璃透出。控件可用但不激活应用，所以调参时全局鼠标监听仍在工作。点击菜单栏图标弹出菜单（快捷启停特效 / 打开管理面板 / 退出 BA Click）。所有改动即时生效并（防抖）持久化到 `settings.json`。
 
-- **Trail mode** — "始终显示尾迹" on: trail follows any mouse move. Off: trail only appears while a mouse button is held and dragging (left / right / middle all work).
+- **Trail mode** — the "always show trail" toggle (始终显示尾迹) on: trail follows any mouse move. Off: trail only appears while a mouse button is held and dragging (left / right / middle all work).
   
   **尾迹模式**——开启"始终显示尾迹"：尾迹跟随任意鼠标移动；关闭：仅在按住任意鼠标键并拖动时显示尾迹（左键 / 右键 / 中键均可）。
 - **Mouse buttons / 鼠标按键** — left, right and middle clicks all spawn the click effect; right/middle are independently toggleable in the panel (`rightClickEnabled` / `middleClickEnabled`).
   
   **鼠标按键**——左键、右键、中键点击都会触发点击特效；右键 / 中键可在面板中独立开关（`rightClickEnabled` / `middleClickEnabled`）。
 
-- **Updates / 更新** — panel's **检查更新** queries the GitHub latest release API and compares versions; **自动检测更新** (on by default) checks once at launch (3s in) and each time the panel opens, throttled to once per 60s and silent on failure — the manual button always checks for real. The status line always shows the running version (e.g. `v0.3.3`) when idle, then `v0.3.3 已是最新版本` / `发现新版本 vX.Y.Z`. **立即更新** downloads the DMG for the running architecture, verifies it is signed with the SAME certificate as the running app (designated-requirement match — a tampered proxy-served download is refused), mounts it, atomically replaces the app bundle via a detached helper (`~/Library/Logs/BA Click/update.log`, rollback on failure) and relaunches. When auto-update isn't possible (raw binary / unwritable location / failure) it opens the GitHub Releases page. The **GitHub 仓库** button opens the repo home.
+- **Updates / 更新** — panel's **检查更新 (Check for Updates)** queries the GitHub latest release API and compares versions; **自动检测更新 (Check Automatically)** (on by default) checks once at launch (3s in) and each time the panel opens, throttled to once per 60s and silent on failure — the manual button always checks for real. The status line always shows the running version (e.g. `v0.3.3`) when idle, then "up to date" / "update available" after a check. **立即更新 (Update Now)** downloads the DMG for the running architecture, verifies it is signed with the SAME certificate as the running app (designated-requirement match — a tampered proxy-served download is refused), mounts it, atomically replaces the app bundle via a detached helper (`~/Library/Logs/BA Click/update.log`, rollback on failure) and relaunches. When auto-update isn't possible (raw binary / unwritable location / failure) it opens the GitHub Releases page. The **GitHub 仓库 (GitHub Repo)** button opens the repo home.
   
   **更新**——面板**检查更新**查询 GitHub 最新 release 并与当前版本对比；**自动检测更新**（默认开）在启动 3 秒后和每次打开面板时各检查一次，60 秒节流、失败静默——手动点按钮则始终真实检查。状态栏空闲时常显当前版本号（如 `v0.3.3`），检查后显示 `v0.3.3 已是最新版本` / `发现新版本 vX.Y.Z`。**立即更新**下载对应架构 DMG，先校验其签名与当前应用是同一张证书（设计需求匹配，代理投递的篡改包会被拒绝）→ 挂载 → 通过分离助手脚本原子替换应用包（日志在 `~/Library/Logs/BA Click/update.log`，失败自动回滚）→ 自动重启。无法自动更新（裸二进制 / 目录不可写 / 失败）时跳转 GitHub Releases 页面；**GitHub 仓库**按钮打开仓库主页。
 
@@ -243,6 +264,14 @@ Every runtime setting touches the same places — keep them in sync:
 - **Launch at login / 开机自启** — bundled apps register via `SMAppService`, so the entry shows up in System Settings → General → Login Items; registering never launches the app on the spot. The raw binary (run.sh) can't self-register there and falls back to a user LaunchAgent plist, registered dormant (disable → bootstrap → enable). Legacy plist registrations (≤0.2.1) migrate on the next toggle. A `flock` single-instance lock (`~/.ba-click-mac.lock`) makes any double-launch exit immediately.
   
   **开机自启**——捆绑版通过 `SMAppService` 注册，条目出现在 系统设置 → 通用 → 登录项，注册绝不当场启动；裸二进制（run.sh）回退为用户 LaunchAgent plist，以"禁用→注册→启用"方式休眠注册。旧版（≤0.2.1）的 plist 注册在下次切换开关时自动迁移。另有 `flock` 单实例锁（`~/.ba-click-mac.lock`），双开时第二个实例立即退出。
+
+- **Force topmost / 强制置顶** — opt-in (private API): the overlays join a dedicated SkyLight space pinned above the screen-lock level, so the effects render above menus, the Dock, launchers and even the lock screen. Turning it off rebuilds the overlays (windows cannot leave the space otherwise); all calls are guarded and fall back to the normal level.
+  
+  **强制置顶**——可选功能（私有 API）：把覆盖层窗口移入钉在锁屏层级之上的专属 SkyLight Space，特效显示在菜单、Dock、启动器乃至锁屏之上。关闭时通过重建覆盖层窗口退出该 Space；所有私有调用均有守卫，失败时保持普通层级。
+
+- **GPU-pressure adaptations / GPU 压力自适应** — sampling is never starved: when frames complete slowly (other apps squeezing the GPU), the draw pacer skips every second DRAW, frames whose predecessor is still executing are skipped instead of blocking, and only the glow drops resolution (0.5x → 0.25x native) while the core always renders sharp. Pressure signals and states are visible in the HUD.
+  
+  **GPU 压力自适应**——采样永远不被饿死：tick 持续超预算时自动隔帧绘制；上一帧未完成时跳帧而非阻塞等待；压力下只有辉光降分辨率（0.5× → 0.25× 原生），核心永远锐利。全部状态可在 HUD 中观察。
 
 ## Project layout / 工程结构
 
@@ -260,6 +289,8 @@ Sources/BaClickMac/
   FXSettings.swift           settings.json loading / defaults (lenient decode)
   PowerMonitor.swift         AC/battery detection + power-state notifications
   SingleInstance.swift       flock-based single-instance guard
+  DrawPacer.swift            Adaptive draw pacing (GPU contention → skip draws)
+  SkyLightSpace.swift        Private-framework interop for force-topmost mode
   BAEffectData.swift         Unity keyframes / game-derived values
   DebugLog.swift             stderr logging + bail() helper
   ResourceLocator.swift      Shared bundled-resource lookup
@@ -267,20 +298,22 @@ Sources/BaClickMac/
   SettingsPanel.swift        SwiftUI management panel + non-activating NSPanel
   UpdateManager.swift        GitHub update check + self-update (helper script)
   AppInfo.swift              App version + GitHub links
-  L10n.swift                 Chinese/English strings, system-language detection
+  L10n.swift                 Chinese/English/Japanese strings + language override
 Resources/
   AppIcon.icns               macOS app icon (used by the .app bundle)
   icon.png                   App icon bitmap (Dock icon for the raw binary)
   bar_icon_22/44.png         Menu bar icon (1x / 2x template)
   circle/ring/trail/triangle  Game-derived effect textures
+  dmg-background.jpg         DMG installer background (generated, committed)
 icons/
   icon.icon / bar_icon.svg    Icon sources (Icon Composer package / menu bar SVG)
 tools/
   svg2png.sh / svg2png.swift SVG → PNG converter (menu bar icon regeneration)
   build-icon.sh              Regenerate icon.png + AppIcon.icns from icons/icon.icon
-  regen-app-icon.sh          Legacy: same from icons/icon.svg (kept for reference)
+  make-dmg-background.sh     Regenerate the DMG background (from ../room_night.png)
 Tests/
-  main.swift                 Unit tests: BAEval / ParticleSystem / FXSettings
+  main.swift                 Unit tests: BAEval / ParticleSystem / FXSettings / L10n /
+                             ScreenGeometry / DrawPacer / UpdateManager / SingleInstance
 .github/workflows/build.yml  CI: build + unit tests on macOS
 build.sh                     Build binary, --app for the .app bundle, --release for DMGs
 build-app.sh                 Wrapper for ./build.sh --app
@@ -296,8 +329,8 @@ Global mouse observation via `NSEvent.addGlobalMonitorForEvents` is generally al
 
 ## Troubleshooting / 排障
 
-- **Effect appears randomly / 特效随机消失或时有时无**: this used to be the MTKView display link stalling after Space/fullscreen transitions — now fixed by the manual 60 fps render loop. If it ever looks dead again, check the watchdog (a stale frame forces a redraw every 0.5 s).
-  这曾是 MTKView display link 在 Space/全屏切换后停滞所致——现已通过手动 60fps 渲染循环修复。若再次看起来"死了"，看门狗每 0.5 秒会强制补一帧。
+- **Effect appears randomly / 特效随机消失或时有时无**: this used to be the MTKView display link stalling after Space/fullscreen transitions — now fixed by the manual vsync render loop. If it ever looks dead again, the watchdog rebuilds a silent tick loop on its own; the HUD's `tick/s` / `drawAge` show whether it recovered.
+  这曾是 MTKView display link 在 Space/全屏切换后停滞所致——现已通过手动 vsync 渲染循环修复。若再次看起来"死了"，看门狗会重建沉默的 tick 循环；HUD 的 `tick/s` 与 `drawAge` 能显示它是否恢复。
 - **App exits immediately with a `FATAL:` message / 启动即退出并打印 `FATAL:`**: Metal device / shader compile / texture load failed — run from a terminal to see the exact reason (resources must exist in `Resources/` with the expected sizes).
   Metal 设备 / Shader 编译 / 纹理加载失败——请从终端运行查看具体原因（`Resources/` 下资源必须存在且尺寸匹配）。
 - **No click response at all / 点击完全无反应**: make sure the app is not frontmost (never `activate` it); the global mouse monitor only receives events while another app is active.
