@@ -74,7 +74,6 @@ final class SettingsStore: ObservableObject {
     }
 
     /// Restore every persisted SETTING to its default. Launch-at-login is
-    /// system state and the click counter is statistics — neither is touched. to its default. Launch-at-login is
     /// system state and the click counter is statistics — neither is touched.
     func resetToDefaults() {
         let preservedCount = model.clickCount

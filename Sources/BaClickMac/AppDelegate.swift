@@ -441,7 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// main runloop was blocked (Space animation, Mission Control, etc.). If
     /// the timer is running but no draw callback has fired for >0.5s, force
     /// one frame immediately and reassert the layer.
-    /// Watchdog: draws are non-blocking and skipped intentionally (pacer,: draws are non-blocking and skipped intentionally (pacer,
+    /// Watchdog: draws are non-blocking and skipped intentionally (pacer,
     /// in-flight, empty display), so a stale lastDrawTime is NOT a stall —
     /// treating it as one used to force a full-pipeline redraw of EVERY
     /// display every 0.5s (including empty ones), which was itself a major
