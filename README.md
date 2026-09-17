@@ -28,40 +28,58 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 ## Status / 状态
 
 - ✅ Transparent click-through overlay
+
   透明可穿透覆盖层
 - ✅ Global click + mouse-move tracking
+
   全局点击 + 鼠标移动追踪
 - ✅ Click effect: center disk, rotating dissolve arcs, flying shards
+
   点击特效：中心圆盘、旋转溶解弧光、飞散碎片
 - ✅ Cursor trail with width taper
+
   带收细的鼠标光迹
 - ✅ Original game textures + Unity particle curves
+
   原始游戏贴图 + Unity 粒子曲线
 - ✅ Multi-pass MXFinalBloom (HDR scene → pyramid → additive glow)
+
   多级 MXFinalBloom 辉光（HDR 场景 → 金字塔 → 叠加辉光）
 - ✅ Works over fullscreen apps (persistent per-screen NSPanels)
+
   全屏应用之上正常显示（每屏常驻 NSPanel）
 - ✅ Manual vsync render loop, 24–240 fps (display-link stalls fixed)
+
   手动垂直同步渲染循环，24–240fps（修复 display link 停滞）
 - ✅ Idle power saving (render stops when nothing is on screen; displays without active content skip their whole pipeline)
+
   闲置省电（无内容时停止渲染；无活动粒子的显示器整条渲染管线跳过）
 - ✅ Unit tests (`./test.sh`) + CI (`GitHub Actions`)
+
   单元测试 + CI
 - ✅ Menu bar icon + management panel (no Dock icon)
+
   菜单栏图标 + 管理面板（无 Dock 图标）
 - ✅ Right-click + middle-click effects (independently toggleable)
+
   右键 + 中键点击效果（可独立开关）
 - ✅ Update check + self-update (falls back to GitHub Releases)
+
   检查更新 + 自动更新（失败时跳转 Releases）
 - ✅ Optional auto update check (at launch + panel open, throttled & silent)
+
   可选的自动检测更新（启动 + 打开面板时，节流且静默）
 - ✅ Battery saver: run effects only when plugged in
+
   仅接通电源时启用（电池时自动暂停特效）
 - ✅ Force topmost (opt-in, private SkyLight API): renders above Dock/menus/launchers/even the lock screen
+
   强制置顶（可选，私有 SkyLight API）：显示在 Dock、菜单、启动器甚至锁屏之上
 - ✅ Launch at login
+
   开机自启
 - ✅ Multi-monitor overlays, one per attached display
+
   多显示器覆盖层（每个显示器一个）
 
 > **App icon / 应用图标**: authored in the modern **Icon Composer** (macOS 26+ / Xcode 26) as `icons/icon.icon` (an `icon.json` manifest + layered `Assets/*.svg`). The format is **full-bleed** — macOS applies its own squircle mask (a continuous curve, not a plain rounded corner, and it differs across OS versions) in the Dock/Launchpad, so **do not** bake rounded corners or margins into the artwork. After editing in Icon Composer, regenerate with `./tools/build-icon.sh` (renders via the bundled `ictool` CLI, produces `Resources/icon.png` + `Resources/AppIcon.icns`). Requires `/Applications/Icon Composer.app`.
