@@ -19,7 +19,7 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 | Trail | Cursor trail with width taper (tail thins, color stays constant) | 鼠标光迹，尾部收细（颜色不变） |
 | Glow | Ported original `MXFinalBloom` (multi-level pyramid, prefilter → downsample → upsample → additive) | 移植原版 `MXFinalBloom`（多级金字塔：预过滤 → 降采样 → 升采样 → 叠加） |
 | Fullscreen | NSPanel (`fullScreenAuxiliary`) is carried into fullscreen apps' Spaces automatically — works over QQ / Chrome fullscreen video | NSPanel（`fullScreenAuxiliary`）自动进入全屏应用的 Space —— QQ / Chrome 全屏视频下均正常 |
-| Live tuning | Edit `settings.json`, hot-reloaded every 0.5 s; partial files allowed | 编辑 `settings.json`，每 0.5 秒热重载；允许只写要改的键 |
+| Live tuning | The panel applies changes live (persisted to `settings.json`); the file itself is read at launch, partial files allowed | 面板实时调参（防抖写入 `settings.json`）；配置文件本身在启动时读取，允许只写要改的键 |
 | Power saving | Stops rendering when idle; no GPU work behind hidden fullscreen (`showInFullscreen=false`) | 闲置时停止渲染；隐藏全屏时不产生 GPU 开销（`showInFullscreen=false`） |
 | Management panel | Apple-native panel via the menu bar icon: effect on/off, launch at login, trail mode/thickness/glow, click size/brightness/opacity, refresh rate, right/middle-click toggles, power-saver toggle, force topmost, click statistics, auto update check, update status with the running version, reset to defaults, language selector | 菜单栏图标打开的 Apple 原生管理面板：效果开关、开机自启、仅接通电源时启用、强制置顶、尾迹模式/粗细/辉光、点击大小/亮度/透明度、刷新率、右键/中键开关、点击统计、自动检测更新、检查更新 + GitHub 仓库（状态栏常显当前版本号）、恢复默认设置、语言选择 |
 | i18n | Chinese/English/Japanese UI with a language selector in the panel (auto-detect by default) | 中/英/日三语界面，面板内置语言选择器（默认跟随系统） |
@@ -158,9 +158,9 @@ BA_CLICK_LOOP=1 ./run.sh   # auto-clicks screen center every 0.9 s
 
 ## settings.json (live tuning / 实时调参)
 
-The app loads `settings.json` from the **current working directory**, the **executable's folder**, or `~/.ba-click-mac-settings.json` (first found wins) and **reloads it every 0.5 s** — edit and save, no restart needed. The file is optional: **the defaults below are the tuned "best" values**, so you can run without any settings file. A full template lives in `settings.example.json`.
+The app reads `settings.json` from the **current working directory**, the **executable's folder**, or `~/.ba-click-mac-settings.json` (first found wins) **at launch**. The file is optional: **the defaults below are the tuned "best" values**, so you can run without any settings file — and the management panel IS the live-tuning surface: its changes apply instantly and are written back (debounced) to this file. A full template lives in `settings.example.json`.
 
-应用会从**当前工作目录**、**可执行文件所在目录**或 `~/.ba-click-mac-settings.json`（按顺序取第一个存在的）加载 `settings.json`，并**每 0.5 秒热重载**——改完保存即可，无需重启。该文件是可选的：**下表默认值就是调好的"最佳"参数**，不提供文件也能直接跑。完整模板见 `settings.example.json`。
+应用会从**当前工作目录**、**可执行文件所在目录**或 `~/.ba-click-mac-settings.json`（按顺序取第一个存在的）在**启动时**读取 `settings.json`。该文件是可选的：**下表默认值就是调好的"最佳"参数**，不提供文件也能直接跑——而管理面板才是实时调参的入口：改动即时生效并（防抖）写回此文件。完整模板见 `settings.example.json`。
 
 | Key | Default | Meaning / 含义 |
 |---|---|---|
@@ -337,8 +337,8 @@ Global mouse observation via `NSEvent.addGlobalMonitorForEvents` is generally al
   请确认应用不是前台（绝不 `activate`）；全局鼠标监听只在其他应用为前台时才能收到事件。
 - **HUD shows nothing / HUD 不显示**: it is off by default — run with `BA_SHOW_HUD=1`.
   默认关闭——用 `BA_SHOW_HUD=1` 运行。
-- **Settings not applied / 设置没生效**: the app reloads every 0.5 s; watch stderr for `[settings] WARNING:` (invalid JSON → defaults; unknown key → ignored).
-  应用每 0.5 秒重载；留意 stderr 的 `[settings] WARNING:`（JSON 非法 → 回退默认值；未知键 → 忽略）。
+- **Settings not applied / 设置没生效**: the file is read at launch — if you edited it while the app was running, restart; for live tuning use the panel. Watch stderr for `[settings] WARNING:` (invalid JSON → defaults; unknown key → ignored).
+  配置文件在启动时读取——应用运行中改文件需重启生效；实时调参请用面板。留意 stderr 的 `[settings] WARNING:`（JSON 非法 → 回退默认值；未知键 → 忽略）。
 
 ## Notes / 备注
 

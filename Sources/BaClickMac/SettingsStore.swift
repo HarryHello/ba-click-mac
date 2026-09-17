@@ -73,18 +73,8 @@ final class SettingsStore: ObservableObject {
         changed()
     }
 
-    /// True while a panel-driven change is waiting to be written to disk;
-    /// external hot-reload must not clobber this window.
-    var isPersistPending: Bool { persistTimer != nil }
-
-    /// Hot-reload externally edited `settings.json` (documented behavior).
-    /// The L10n override syncs via `changed()`.
-    func reloadFromDisk() {
-        model = FXSettings.load()
-        changed()
-    }
-
     /// Restore every persisted SETTING to its default. Launch-at-login is
+    /// system state and the click counter is statistics — neither is touched. to its default. Launch-at-login is
     /// system state and the click counter is statistics — neither is touched.
     func resetToDefaults() {
         let preservedCount = model.clickCount

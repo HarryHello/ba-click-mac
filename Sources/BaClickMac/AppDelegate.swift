@@ -231,7 +231,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let timer = Timer(timeInterval: Self.housekeepingInterval, repeats: true) { [weak self] _ in
             self?.updateStatus()
             self?.updateFullscreenState()
-            self?.reloadSettingsFromDiskIfNeeded()
             self?.checkStall()
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -442,24 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// main runloop was blocked (Space animation, Mission Control, etc.). If
     /// the timer is running but no draw callback has fired for >0.5s, force
     /// one frame immediately and reassert the layer.
-    /// Hot-reload externally edited settings.json (documented in the README):
-    /// every housekeeping tick, decode the persisted file and apply it when
-    /// its content differs from the current model. Skipped while a panel
-    /// write is pending — the file lags behind the in-memory model during the
-    /// debounce window, and reloading it would clobber fresh panel changes.
-    private func reloadSettingsFromDiskIfNeeded() {
-        guard !store.isPersistPending else { return }
-        guard let data = try? Data(contentsOf: FXSettings.persistURL()),
-              let fileModel = try? JSONDecoder().decode(FXSettings.self, from: data) else { return }
-        var fileJSON = Data(); var modelJSON = Data()
-        if let a = try? JSONEncoder().encode(fileModel) { fileJSON = a }
-        if let b = try? JSONEncoder().encode(store.model) { modelJSON = b }
-        if fileJSON != modelJSON {
-            store.reloadFromDisk()
-        }
-    }
-
-    /// Watchdog: draws are non-blocking and skipped intentionally (pacer,
+    /// Watchdog: draws are non-blocking and skipped intentionally (pacer,: draws are non-blocking and skipped intentionally (pacer,
     /// in-flight, empty display), so a stale lastDrawTime is NOT a stall —
     /// treating it as one used to force a full-pipeline redraw of EVERY
     /// display every 0.5s (including empty ones), which was itself a major
