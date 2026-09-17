@@ -7,7 +7,7 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 ## [Unreleased]
 
 ### Fixed / 修复
-- **settings.json 热重载此前只存在于文档**：README 与功能表宣称“每 0.5s 热重载外部编辑”，但从未实现（`load()` 仅在启动时调用）。现在 0.5s 房管检查会比对磁盘内容与当前模型，不一致即应用——外部编辑调参无需重启；面板驱动的防抖写入窗口自动跳过，不会回跳。清理遗留的 `regen-app-icon.sh`（已被 `build-icon.sh` 取代）。
+- **settings.json 热重载：文档自 v0.1.0 起宣称"每 0.5s 热重载"，全历史验证从未实现**（`load()` 一直只在启动时调用，所有 tag 均无周期性重载）。本次补齐实现：0.5s 房管检查比对磁盘内容与当前模型，不一致即应用——外部编辑调参无需重启；面板驱动的防抖写入窗口自动跳过，不会回跳。清理遗留的 `regen-app-icon.sh`（已被 `build-icon.sh` 取代）。
 
 ## [0.3.3] - 2026-09-17
 
