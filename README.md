@@ -1,4 +1,4 @@
-# ba-click-mac
+# BA Click for MacOS
 
 > A native macOS version of the **Blue Archive click effect + cursor trail**, written in **Swift + Metal**, based on the [ba-click-fx](https://github.com/CialloKing/ba-click-fx) web effect.
 >
@@ -112,14 +112,23 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 ## Requirements / 环境要求
 
 - macOS 14+ (built with `./build.sh`; the vsync render driver is the floor, macOS 26+ enables the native liquid-glass panel)
+  
   macOS 14+（`./build.sh` 构建；macOS 14 起启用 vsync 渲染驱动，macOS 26+ 启用原生液态玻璃面板）
+
 - The x64 (Intel) DMG only runs while macOS still ships Rosetta 2 — macOS 27 is the last major release to support Intel apps, so the x64 build is end-of-life with macOS 28. Apple Silicon users should use the arm64 DMG.
-- x64（Intel）DMG 依赖 macOS 自带的 Rosetta 2：macOS 27 是最后支持 Intel 应用的大版本，macOS 28 起 x64 构建将无法运行。Apple Silicon 用户请使用 arm64 DMG。
+- 
+  x64（Intel）DMG 依赖 macOS 自带的 Rosetta 2：macOS 27 是最后支持 Intel 应用的大版本，macOS 28 起 x64 构建将无法运行。Apple Silicon 用户请使用 arm64 DMG。
+
 - Xcode Command Line Tools or Xcode (Swift toolchain)
+  
   Xcode Command Line Tools 或 Xcode（Swift 工具链）
+
 - A Metal-capable Mac (any Apple Silicon, most Intel Macs)
-- 需要 Metal 支持的 Mac（Apple Silicon 或大部分 Intel Mac）
+ 
+  需要 Metal 支持的 Mac（Apple Silicon 或大部分 Intel Mac）
+
 - `build.sh` is the single build entry (binary, or `--app` for the .app bundle); there is no SPM `Package.swift` — `test.sh` builds the unit-test harness directly.
+  
   `build.sh` 是唯一构建入口（二进制，或 `--app` 构建可双击 .app 包）；无 SPM `Package.swift`——`test.sh` 直接构建单元测试。
 
 ## Build, run & test / 构建、运行与测试
@@ -186,9 +195,11 @@ The app reads `settings.json` from the **current working directory**, the **exec
 | `triangleOpacity` | `1.0` | Triangle particle opacity (higher = more opaque) / 三角粒子不透明度（越高越实） |
 | `refreshRate` | `60` | Render refresh rate (30/60/120/240) / 渲染刷新率 |
 
-> **Launch at login / 开机自启** is not persisted in `settings.json` — it's system state (SMAppService / LaunchAgent) toggled by the panel's launch-at-login switch (开机自启).
-
-> **Lenient parsing / 宽容解析**: a `settings.json` may contain **only the keys you want to override** — missing keys keep the defaults. Unknown keys print a warning to stderr (ignored); invalid JSON prints a warning and falls back to defaults. This is intentional, so a partial edit never silently wipes your other settings.
+> **Launch at login** is not persisted in `settings.json` — it's system state (SMAppService / LaunchAgent) toggled by the panel's launch-at-login switch.
+>
+> **开机自启**不保存在 `settings.json` 里——它是系统状态（SMAppService / LaunchAgent），由面板的开机自启开关控制。
+>
+> **Lenient parsing**: a `settings.json` may contain **only the keys you want to override** — missing keys keep the defaults. Unknown keys print a warning to stderr (ignored); invalid JSON prints a warning and falls back to defaults. This is intentional, so a partial edit never silently wipes your other settings.
 >
 > **解析规则**：`settings.json` 可以**只写你要改的键**——缺失的键沿用默认值。未知键会在 stderr 打印告警（忽略）；JSON 非法会打印告警并回退默认值。这是刻意设计：部分修改不会悄悄丢掉其它设置。
 >
@@ -211,7 +222,8 @@ Every runtime setting touches the same places — keep them in sync:
    `Renderer.applySettings`); panel-gating logic (e.g. trail mode) lives in
    `AppDelegate`.
 4. **L10n** (`Sources/BaClickMac/L10n.swift`): add a `"key": (zh, en)` entry if
-   the label is user-facing.
+   the label is user-facing, plus its Japanese translation in the `ja` table —
+   the completeness test fails if a key is missing.
 5. **Docs**: `settings.example.json` + this README table.
 6. **Tests**: `Tests/main.swift` — assert the new default + (if relevant) the
    persist round-trip.
