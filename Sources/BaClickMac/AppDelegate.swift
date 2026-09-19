@@ -231,6 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let timer = Timer(timeInterval: Self.housekeepingInterval, repeats: true) { [weak self] _ in
             self?.updateStatus()
             self?.updateFullscreenState()
+            self?.reassertTopmostIfNeeded()
             self?.checkStall()
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -441,6 +442,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// main runloop was blocked (Space animation, Mission Control, etc.). If
     /// the timer is running but no draw callback has fired for >0.5s, force
     /// one frame immediately and reassert the layer.
+    /// Force-topmost must survive sleep and WindowServer state resets: the
+    /// SkyLight space assignment is session-scoped and gets dropped when the
+    /// system sleeps, silently returning the overlays to their normal
+    /// (floating) level while our "delegated" flag stays true. Every
+    /// housekeeping tick, verify each overlay's reported CGWindowLayer and
+    /// re-delegate into the high-level space when it fell back below the
+    /// screen-lock level (300).
+    private func reassertTopmostIfNeeded() {
+        guard store.model.forceTopmost, topmostDelegated, !fullscreenHidden,
+              SkyLightSpace.shared.available else { return }
+        guard let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly], kCGNullWindowID
+        ) as? [[String: Any]] else { return }
+        let layers = Dictionary(uniqueKeysWithValues: list.compactMap { info -> (Int, Int)? in
+            guard let n = info[kCGWindowNumber as String] as? Int,
+                  let l = info[kCGWindowLayer as String] as? Int else { return nil }
+            return (n, l)
+        })
+        let stale = overlays.contains { overlay in
+            layers[overlay.window.windowNumber].map { $0 < 300 } ?? true
+        }
+        if stale {
+            overlays.forEach { SkyLightSpace.shared.delegateWindow($0.window) }
+        }
+    }
+
     /// Watchdog: draws are non-blocking and skipped intentionally (pacer,
     /// in-flight, empty display), so a stale lastDrawTime is NOT a stall —
     /// treating it as one used to force a full-pipeline redraw of EVERY
