@@ -143,6 +143,10 @@ final class UpdateManager: ObservableObject {
     /// to opening the Releases page whenever auto-update can't be done.
     func installUpdate() {
         guard case .updateAvailable = state else { return }
+        if Self.isHomebrewInstall() {
+            state = .failed(L10n.t("homebrewUpdate"))
+            return
+        }
         guard let release = latestRelease,
               let assets = release["assets"] as? [[String: Any]],
               let target = assets.first(where: {
@@ -211,6 +215,14 @@ final class UpdateManager: ObservableObject {
     private func canReplaceBundle(at path: String) -> Bool {
         let parent = (path as NSString).deletingLastPathComponent
         return FileManager.default.isWritableFile(atPath: parent)
+    }
+
+    /// True when the running bundle lives inside a Homebrew Caskroom. Those
+    /// installs are managed by `brew upgrade`: /Applications holds a symlink
+    /// into the versioned Caskroom directory, so an in-place self-update would
+    /// desync Homebrew's bookkeeping — updates must go through brew.
+    static func isHomebrewInstall(bundlePath: String = Bundle.main.bundlePath) -> Bool {
+        bundlePath.contains("/Caskroom/")
     }
 
     private func fallbackToReleases() {

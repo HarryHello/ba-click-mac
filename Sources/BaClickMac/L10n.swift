@@ -94,6 +94,10 @@ enum L10n {
         "updateNotPossible": ("无法自动更新，已打开 GitHub Releases", "Auto-update unavailable — opened GitHub Releases"),
         "updateDownloadFailed": ("更新下载失败，已打开 GitHub Releases", "Download failed — opened GitHub Releases"),
         "updateMountFailed": ("更新安装失败，已打开 GitHub Releases", "Install failed — opened GitHub Releases"),
+        "homebrewUpdate": (
+            "本副本由 Homebrew 安装，请在终端运行 brew upgrade --cask ba-click",
+            "Installed via Homebrew — run `brew upgrade --cask ba-click` in Terminal"
+        ),
         "clickCountEnabled": ("点击统计", "Click Statistics"),
         "clickCountLabel": ("已点击 %d 次", "Clicked %d times"),
         "language": ("语言", "Language"),
@@ -122,6 +126,7 @@ enum L10n {
         "updateNotPossible": "自動更新できませんでした。GitHub Releases を開きました",
         "updateDownloadFailed": "ダウンロードに失敗しました。GitHub Releases を開きました",
         "updateMountFailed": "インストールに失敗しました。GitHub Releases を開きました",
+        "homebrewUpdate": "Homebrewでインストールされているため、ターミナルで brew upgrade --cask ba-click を実行してください",
         "trailAlwaysVisible": "トレイルを常に表示",
         "trailHelp": "オフにすると、マウスボタンを押しながらドラッグしたときだけ表示されます",
         "rightClickEffect": "右クリックエフェクト",

@@ -393,6 +393,33 @@ func testAutoCheckThrottle() {
     )
 }
 
+// MARK: - Homebrew install detection (pure)
+
+func testHomebrewInstallDetection() {
+    // Cask installs live in the versioned Caskroom, symlinked into
+    // /Applications — self-update must be refused for those paths.
+    expect(
+        UpdateManager.isHomebrewInstall(
+            bundlePath: "/opt/homebrew/Caskroom/ba-click/1.0.0/BA Click.app"
+        ),
+        "homebrew: Apple Silicon Caskroom path detected"
+    )
+    expect(
+        UpdateManager.isHomebrewInstall(
+            bundlePath: "/usr/local/Caskroom/ba-click/1.0.0/BA Click.app"
+        ),
+        "homebrew: Intel Caskroom path detected"
+    )
+    expect(
+        !UpdateManager.isHomebrewInstall(bundlePath: "/Applications/BA Click.app"),
+        "homebrew: plain /Applications install not detected"
+    )
+    expect(
+        !UpdateManager.isHomebrewInstall(bundlePath: "/tmp/build/BA Click.app"),
+        "homebrew: dev bundle location not detected"
+    )
+}
+
 // MARK: - Update check (live network; opt-in via BA_TEST_NETWORK=1)
 
 /// Exercises the real GitHub latest-release API + proxy fallback. Skipped
@@ -534,6 +561,7 @@ testScreenGeometryRouting()
 testSingleInstanceLock()
 testUpToDateLabel()
 testAutoCheckThrottle()
+testHomebrewInstallDetection()
 testUpdateHelperScript()
 testUpdateCheckLive()
 

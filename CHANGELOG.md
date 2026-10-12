@@ -4,9 +4,15 @@ All notable changes to **BA Click** — the native macOS (Swift + Metal) version
 
 ---
 
-## [Unreleased]
+## [1.0.0] - 2026-10-12
+
+首个正式稳定版：功能面与性能栈趋于成熟，并新增 Homebrew 安装渠道。
+
+### 新增 / Added
+- **Homebrew 安装支持**：新建官方 tap（[HarryHello/homebrew-tap](https://github.com/HarryHello/homebrew-tap)），`brew install --cask harryhello/tap/ba-click` 一条命令安装、`brew upgrade` 升级。应用内「立即更新」检测到 Homebrew 安装（Caskroom 路径）时不再就地替换——/Applications 里是指向版本化 Caskroom 目录的符号链接，就地替换会打乱 brew 的版本管理——改为三语提示改用 `brew upgrade --cask ba-click`（ja 词条由完整性测试覆盖）。发版脚本 `tools/update-homebrew-tap.sh` 在每次发布后自动更新 Cask 的版本号与双架构 sha256；新增安装检测单元测试。
 
 ### Fixed / 修复
+- **强制置顶在系统休眠后失效**：SkyLight Space 的窗口归属是会话级状态，休眠唤醒 / WindowServer 重置后覆盖层窗口会静默掉回普通层级。现在 housekeeping 周期（0.5s）校验覆盖层的 CGWindowLayer，一旦掉出高级别（< 300）自动重新委托进 SkyLight Space——不再需要到面板里重新开关一次。
 - **移除文档中从未实现的热重载承诺**：README 自建仓起宣称"每 0.5s 热重载外部编辑的 settings.json"，全历史验证从未实现——面板已是实时调参 + 持久化的唯一入口，该承诺属建仓前文件配置时代的设计残留。文档改为如实描述（配置文件启动时读取；面板实时调参并持久化）。清理遗留的 `regen-app-icon.sh`（已被 `build-icon.sh` 取代）。
 
 ## [0.3.3] - 2026-09-17

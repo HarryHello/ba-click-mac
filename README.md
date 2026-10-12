@@ -109,6 +109,28 @@ It creates transparent, borderless, **click-through** overlays covering all atta
 >
 > **菜单栏图标**：以 22pt 渲染，源文件为 `icons/bar_icon.svg`。改完 SVG 后用上面的命令重新生成 PNG。
 
+## Install / 安装
+
+**Homebrew** (recommended) — install and upgrade with one command from our tap:
+
+```
+brew install --cask harryhello/tap/ba-click
+```
+
+Updates go through `brew upgrade --cask ba-click`; the in-app updater detects Homebrew installs (Caskroom path) and points you there instead of replacing the bundle in place.
+
+**Homebrew（推荐）**——一条命令从我们的 tap 安装与升级：
+
+```
+brew install --cask harryhello/tap/ba-click
+```
+
+升级走 `brew upgrade --cask ba-click`；应用内更新检测到 Homebrew 安装（Caskroom 路径）时会提示改用 brew 升级，而不是就地替换应用包。
+
+**Manual** — download the DMG for your architecture from [GitHub Releases](https://github.com/HarryHello/ba-click-mac/releases/latest) (`arm64` = Apple Silicon, `x64` = Intel), open it and drag **BA Click** into Applications. The builds are self-signed and not notarized: on first launch, right-click the app and choose **Open** (on macOS 15+, use System Settings → Privacy & Security → **Open Anyway**).
+
+**手动安装**——从 [GitHub Releases](https://github.com/HarryHello/ba-click-mac/releases/latest) 下载对应架构的 DMG（`arm64` = Apple Silicon，`x64` = Intel），打开后把 **BA Click** 拖进 Applications。构建为自签名、未公证：首次启动请**右键 → 打开**（macOS 15+ 需在 系统设置 → 隐私与安全性 中点**仍要打开**）。
+
 ## Requirements / 环境要求
 
 - macOS 14+ (built with `./build.sh`; the vsync render driver is the floor, macOS 26+ enables the native liquid-glass panel)
@@ -261,9 +283,9 @@ Every runtime setting touches the same places — keep them in sync:
   
   **鼠标按键**——左键、右键、中键点击都会触发点击特效；右键 / 中键可在面板中独立开关（`rightClickEnabled` / `middleClickEnabled`）。
 
-- **Updates / 更新** — panel's **检查更新 (Check for Updates)** queries the GitHub latest release API and compares versions; **自动检测更新 (Check Automatically)** (on by default) checks once at launch (3s in) and each time the panel opens, throttled to once per 60s and silent on failure — the manual button always checks for real. The status line always shows the running version (e.g. `v0.3.3`) when idle, then "up to date" / "update available" after a check. **立即更新 (Update Now)** downloads the DMG for the running architecture, verifies it is signed with the SAME certificate as the running app (designated-requirement match — a tampered proxy-served download is refused), mounts it, atomically replaces the app bundle via a detached helper (`~/Library/Logs/BA Click/update.log`, rollback on failure) and relaunches. When auto-update isn't possible (raw binary / unwritable location / failure) it opens the GitHub Releases page. The **GitHub 仓库 (GitHub Repo)** button opens the repo home.
+- **Updates / 更新** — panel's **检查更新 (Check for Updates)** queries the GitHub latest release API and compares versions; **自动检测更新 (Check Automatically)** (on by default) checks once at launch (3s in) and each time the panel opens, throttled to once per 60s and silent on failure — the manual button always checks for real. The status line always shows the running version (e.g. `v1.0.0`) when idle, then "up to date" / "update available" after a check. **立即更新 (Update Now)** downloads the DMG for the running architecture, verifies it is signed with the SAME certificate as the running app (designated-requirement match — a tampered proxy-served download is refused), mounts it, atomically replaces the app bundle via a detached helper (`~/Library/Logs/BA Click/update.log`, rollback on failure) and relaunches. When auto-update isn't possible (raw binary / unwritable location / failure) it opens the GitHub Releases page; Homebrew installs (Caskroom path) get a hint to run `brew upgrade --cask ba-click` instead. The **GitHub 仓库 (GitHub Repo)** button opens the repo home.
   
-  **更新**——面板**检查更新**查询 GitHub 最新 release 并与当前版本对比；**自动检测更新**（默认开）在启动 3 秒后和每次打开面板时各检查一次，60 秒节流、失败静默——手动点按钮则始终真实检查。状态栏空闲时常显当前版本号（如 `v0.3.3`），检查后显示 `v0.3.3 已是最新版本` / `发现新版本 vX.Y.Z`。**立即更新**下载对应架构 DMG，先校验其签名与当前应用是同一张证书（设计需求匹配，代理投递的篡改包会被拒绝）→ 挂载 → 通过分离助手脚本原子替换应用包（日志在 `~/Library/Logs/BA Click/update.log`，失败自动回滚）→ 自动重启。无法自动更新（裸二进制 / 目录不可写 / 失败）时跳转 GitHub Releases 页面；**GitHub 仓库**按钮打开仓库主页。
+  **更新**——面板**检查更新**查询 GitHub 最新 release 并与当前版本对比；**自动检测更新**（默认开）在启动 3 秒后和每次打开面板时各检查一次，60 秒节流、失败静默——手动点按钮则始终真实检查。状态栏空闲时常显当前版本号（如 `v1.0.0`），检查后显示 `v1.0.0 已是最新版本` / `发现新版本 vX.Y.Z`。**立即更新**下载对应架构 DMG，先校验其签名与当前应用是同一张证书（设计需求匹配，代理投递的篡改包会被拒绝）→ 挂载 → 通过分离助手脚本原子替换应用包（日志在 `~/Library/Logs/BA Click/update.log`，失败自动回滚）→ 自动重启。无法自动更新（裸二进制 / 目录不可写 / 失败）时跳转 GitHub Releases 页面；Homebrew 安装（Caskroom 路径）则提示改用 `brew upgrade --cask ba-click`；**GitHub 仓库**按钮打开仓库主页。
 
 - **Battery saver / 仅接通电源时启用** — when the toggle is on, all effects pause on battery power and resume the moment AC power returns (IOKit power-source notification). Desktops without a battery count as always plugged in, so the toggle is a no-op there.
   
