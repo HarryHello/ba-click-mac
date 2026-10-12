@@ -31,22 +31,25 @@ cask "ba-click" do
 
   on_arm do
     sha256 "$ARM_SHA"
+
     url "https://github.com/HarryHello/ba-click-mac/releases/download/v#{version}/BA-Click-#{version}-arm64.dmg"
   end
-
   on_intel do
     sha256 "$X64_SHA"
+
     url "https://github.com/HarryHello/ba-click-mac/releases/download/v#{version}/BA-Click-#{version}-x64.dmg"
   end
 
   name "BA Click"
-  desc "Blue Archive style click effect and cursor trail for macOS"
+  desc "Blue Archive style click effect and cursor trail"
   homepage "https://github.com/HarryHello/ba-click-mac"
 
   livecheck do
     url "https://github.com/HarryHello/ba-click-mac/releases/latest"
     regex(/BA-Click[._-]v?(\d+(?:\.\d+)+)[._-]arm64\.dmg/i)
   end
+
+  depends_on :macos
 
   app "BA Click.app"
 
